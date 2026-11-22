@@ -47,8 +47,8 @@ def run_node_main(node_cls, args=None) -> None:
 class MonitoredNode(Node):
     """Base Node emitting 1 Hz liveness name to /system/node_heartbeat."""
 
-    def __init__(self, node_name: str, emit_heartbeat: bool = True) -> None:
-        super().__init__(node_name)
+    def __init__(self, node_name: str, emit_heartbeat: bool = True, **kwargs) -> None:
+        super().__init__(node_name, **kwargs)
         self._liveness_pub = None
         self._liveness_timer = None
         if emit_heartbeat:

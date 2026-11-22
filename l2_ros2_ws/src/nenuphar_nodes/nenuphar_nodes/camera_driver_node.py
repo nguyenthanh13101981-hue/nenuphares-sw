@@ -10,8 +10,8 @@ from nenuphar_nodes.qos import SENSOR_QOS
 class CameraDriverNode(MonitoredNode):
     """Publishes OAK-D Pro W streams using non-blocking SENSOR_QOS (depth=1)."""
 
-    def __init__(self) -> None:
-        super().__init__('camera_driver')
+    def __init__(self, **kwargs) -> None:
+        super().__init__('camera_driver', **kwargs)
         self.declare_parameter('raft_profile', 'v1_70x50')
         self.declare_parameter('enable_stub_stream', False)
 

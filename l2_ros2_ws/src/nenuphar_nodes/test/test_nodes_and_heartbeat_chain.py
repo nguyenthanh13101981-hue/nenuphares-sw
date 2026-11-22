@@ -5,9 +5,12 @@ import time
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import HistoryPolicy, ReliabilityPolicy
+from nav_msgs.msg import Odometry
 from std_msgs.msg import UInt64
 
+from nenuphar_msgs.msg import ObstacleArray
 from nenuphar_nodes.base_node import ALL_11_NODE_NAMES, MAVLINK_HEARTBEAT_TX_TOPIC
 from nenuphar_nodes.blackbox_node import BlackboxNode
 from nenuphar_nodes.camera_driver_node import CameraDriverNode
@@ -18,7 +21,7 @@ from nenuphar_nodes.formation_node import FormationNode
 from nenuphar_nodes.mavlink_bridge_node import MavlinkBridgeNode
 from nenuphar_nodes.mission_fsm_node import MissionFsmNode
 from nenuphar_nodes.perception_geom_node import PerceptionGeomNode
-from nenuphar_nodes.qos import CMD_QOS
+from nenuphar_nodes.qos import CMD_QOS, SENSOR_QOS
 from nenuphar_nodes.system_monitor_node import SystemMonitorNode
 from nenuphar_nodes.vio_node import VioNode
 
@@ -105,5 +108,49 @@ def test_11_nodes_qos_and_heartbeat_chain() -> None:
             n.destroy_node()
         if observer is not None:
             observer.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+def test_mock_sensor_pipeline_flows_through_vio_and_perception() -> None:
+    rclpy.init()
+    cam = vio = geom = observer = None
+    executor = SingleThreadedExecutor()
+    try:
+        cam = CameraDriverNode(
+            parameter_overrides=[Parameter('enable_stub_stream', value=True)]
+        )
+        vio = VioNode()
+        geom = PerceptionGeomNode()
+        observer = Node('sensor_pipeline_observer')
+
+        odom_msgs = []
+        obstacle_msgs = []
+        observer.create_subscription(
+            Odometry, '/vio/odometry', lambda m: odom_msgs.append(m), SENSOR_QOS
+        )
+        observer.create_subscription(
+            ObstacleArray,
+            '/perception/obstacles',
+            lambda m: obstacle_msgs.append(m),
+            SENSOR_QOS,
+        )
+
+        for n in (cam, vio, geom, observer):
+            executor.add_node(n)
+
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=0.05)
+            if odom_msgs and obstacle_msgs:
+                break
+
+        assert odom_msgs, 'Expected Odometry on /vio/odometry from stub stream'
+        assert obstacle_msgs, 'Expected ObstacleArray on /perception/obstacles'
+        assert obstacle_msgs[-1].depth_config == ObstacleArray.CONFIG_A_400P
+    finally:
+        for n in (cam, vio, geom, observer):
+            if n is not None:
+                n.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

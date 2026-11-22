@@ -1,0 +1,50 @@
+name: NENUPHARES BONNEVAL CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  config-yaml-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML configs
+        run: |
+          python3 -c "import yaml, glob; files = sorted(glob.glob('config/**/*.yaml', recursive=True)); assert files; [yaml.safe_load(open(f)) for f in files]; print('Validated YAML files:', files)"
+
+  l0-c8-pico2-gtest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install C++ / GTest dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ libgtest-dev
+      - name: Build and run L0 C8 CTest suite
+        run: |
+          cmake -S l0_c8_pico2 -B l0_c8_pico2/build
+          cmake --build l0_c8_pico2/build -j2
+          ctest --test-dir l0_c8_pico2/build --output-on-failure
+
+  l2-ros2-jazzy-colcon-test:
+    runs-on: ubuntu-24.04
+    container:
+      image: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python test dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3-yaml python3-pytest
+      - name: Build and test L2 ROS 2 Jazzy workspace
+        run: |
+          set -e
+          source /opt/ros/jazzy/setup.bash
+          cd l2_ros2_ws
+          MAKEFLAGS=-j2 colcon build --symlink-install
+          source install/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --all --verbose
