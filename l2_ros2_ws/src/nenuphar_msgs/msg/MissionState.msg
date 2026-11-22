@@ -1,0 +1,19 @@
+uint8 STATE_S0=0
+uint8 STATE_S1=1
+uint8 STATE_S2=2
+uint8 STATE_S3=3
+uint8 STATE_S4=4
+uint8 STATE_S5=5
+uint8 STATE_S6=6
+uint8 STATE_S7=7
+uint8 STATE_S8=8
+uint8 STATE_S9=9
+uint8 STATE_S10=10
+uint8 STATE_S11=11
+uint8 STATE_S12=12
+
+builtin_interfaces/Time stamp
+uint8 state
+uint8 fault_tier
+bool bridge_permit
+bool hold_all_req

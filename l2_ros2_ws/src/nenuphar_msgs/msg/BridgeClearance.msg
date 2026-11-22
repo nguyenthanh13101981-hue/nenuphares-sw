@@ -1,0 +1,4 @@
+builtin_interfaces/Time stamp
+float32 clearance_m
+float32 consensus_spread_m
+bool pass_permitted

@@ -1,0 +1,5 @@
+builtin_interfaces/Time stamp
+bool usb3_camera_ok
+bool all_nodes_alive
+uint32 failed_node_mask
+float32 cpu_temp_c
