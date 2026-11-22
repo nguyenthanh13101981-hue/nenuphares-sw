@@ -1,0 +1,19 @@
+# Cấu hình giám sát hành lang Z1/Z2 (D-16) & đo cầu S4 / tránh vật cản TR-4.1
+
+corridor:
+  monitor_rate_hz: 10.0
+  zones:
+    - Z1
+    - Z2
+  lateral_deviation_alert_m: 0.15
+
+bridge_s4:
+  max_speed_kmh: 2.0
+  consensus_spread_max_m: 0.05
+  depth_config: config_b_800p
+  bridge_zone_refresh_max_s: 60.0
+
+obstacle_avoidance:
+  depth_config: config_a_400p
+  pi5_perception_max_ms: 50.0
+  e2e_latency_budget_ms: 200.0

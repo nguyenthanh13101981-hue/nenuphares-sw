@@ -1,0 +1,51 @@
+# Profile hình học thân bè V1 cơ sở: 70 x 50 x 25 cm
+# Lưu ý TBD-06 / RI-1.5: Thân 70x50 đang có rủi ro ổn định (GM âm, mạn khô ~5.4 cm).
+# Cần nhóm C2/C3 xác nhận tọa độ chi tiết sau cổng G-ST (A.14 Mục 5).
+
+profile_name: v1_70x50
+status: baseline_gm_risk_tbd06
+
+hull:
+  length_m: 0.70
+  width_m: 0.50
+  height_m: 0.25
+  freeboard_nominal_m: 0.054
+
+# Quy ước hệ tọa độ thân bè (base_link): +X về mũi, +Y sang trái (port), +Z hướng lên từ mặt boong.
+camera_oak_d_pro_w:
+  mount_height_above_deck_m: 0.20
+  alpha_tilt_deg: 0.0
+  position_xyz_m: [0.30, 0.00, 0.20]   # [placeholder - chờ nhóm C2/C3 xác nhận]
+  color_sensor: OV9782
+  stereo_sensor: OV9282
+  depth_hz: 15.0
+  vio_hz: 15.0
+  imu_hz: 200.0
+  usb3_required: true
+
+gnss_dual_antenna:
+  use_compass: false
+  primary_antenna_xyz_m: [0.20, 0.00, 0.10]     # [placeholder - chờ nhóm C2/C3 xác nhận]
+  secondary_antenna_xyz_m: [-0.20, 0.00, 0.10]  # [placeholder - chờ nhóm C2/C3 xác nhận]
+
+thrusters:
+  esc_count: 3
+  esc_model: "Holybro Tekko32 F4 45A (AM32)"
+  esc_current_limit_a: 30.0
+  pwm_khz: 24
+  dshot_bidirectional: true
+  units:
+    left:
+      role: primary_port
+      position_xyz_m: [-0.30, 0.18, -0.10]   # [placeholder - chờ nhóm C2/C5 xác nhận]
+    right:
+      role: primary_starboard
+      position_xyz_m: [-0.30, -0.18, -0.10]  # [placeholder - chờ nhóm C2/C5 xác nhận]
+    stern_backup:
+      role: backup_center
+      position_xyz_m: [-0.32, 0.00, -0.10]   # [placeholder - chờ nhóm C2/C5 xác nhận]
+
+safety_envelope:
+  length_m: 0.90
+  width_m: 0.70
+  min_clearance_margin_m: 0.10

@@ -1,0 +1,12 @@
+l2_ros2_ws/build/
+l2_ros2_ws/install/
+l2_ros2_ws/log/
+build/
+__pycache__/
+*.pyc
+.venv/
+*.bag
+*.db3
+*.mcap
+.vscode/
+*.swp

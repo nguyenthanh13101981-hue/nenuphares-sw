@@ -1,0 +1,9 @@
+param_group,param_name,target_layer,initial_value,sitl_value,l0_value,l1_value,status,notes
+ekf,ekf_source_switch_threshold,L1/L2,TBD,,,,pending_sitl,TBD-20: Nguong chuyen nguon EKF GNSS <-> VIO ODOMETRY duoi cau
+corridor,lateral_deviation_alert_m,L2,0.15,,,,pending_sitl,D-16: Nguong canh bao lech hanh lang Z1/Z2 (> 15 cm)
+fsm,s3_s6_timeout_s,L2,TBD,,,,pending_sitl,TBD-20: Timeout chuyen trang thai S3/S6
+lua_current_limit,total_current_limit_normal_a,L1,70.0,,,,pending_l1,A.7: Gioi han dong tong che do binh thuong (A)
+lua_current_limit,total_current_limit_backup_a,L1,40.0,,,,pending_l1,A.7: Gioi han dong tong che do du phong (A)
+battery,BATT_CRT_VOLT,L1,11.5,,,,pending_l1,A.7/A.9: Nguong cat pin mem tang L1 (11.5-12.0 V)
+battery,voltage_compensation_gain,L1/L2,TBD,,,,pending_l1,TBD-20: Tham so bu ap he thong dong luc
+raft_geometry,active_raft_profile,L1/L2,v1_70x50,,,,pending_gst,TBD-06/RI-1.5: Chon v1_70x50 hoac v1_98x68 sau thu nghiem G-ST
