@@ -31,7 +31,17 @@ Cập nhật: `2026-11-22` (Mốc A — CdCT Final 2.0)
 | Commit SHA | `d9c5097c3d8333435712ffed86bca8ce00c4bb46` | Đã kiểm chứng cùng tham chiếu cho cả `APMrover2-stable` và `Rover-4.7.3` |
 | Cấu hình SITL đã test | `--model motorboat`, `FRAME_CLASS=2`, `SCHED_LOOP_RATE=50` | Đọc xác nhận qua MAVLink (`HEARTBEAT type=11`, `PARAM_VALUE`) dùng `l1_ardupilot/params/sitl_boat_base.parm` |
 
-## 4. Hạng mục chờ chốt ở các mốc tiếp theo
+## 4. Tầng L2 — VIO & Phụ thuộc tối ưu hóa (Mốc B)
 
-- **VIO ROS 2 (`Basalt` vs `VINS-Fusion`):** Chưa chốt (kiểm tra khả năng biên dịch tại Mốc B).
+| Thành phần | Phiên bản / Commit ghim | Ghi chú |
+| :--- | :--- | :--- |
+| VIO đã chốt (Luật cứng #3) | `VINS-Fusion-ROS2` (`https://github.com/zinuok/VINS-Fusion-ROS2.git`, nhánh `main`) | Chọn duy nhất 1 gói VIO sản phẩm (loại bỏ Basalt do wrapper ROS 2 đã ngừng duy trì và lỗi GCC 13 trên thư viện đóng kèm) |
+| VINS-Fusion-ROS2 Commit SHA | `72023bc5d2abb14faa4c02a5c040d84f996b587a` (`2026-04-15`) | Cần 2 bản vá nhỏ cho Jazzy: `cv_bridge/cv_bridge.hpp` và `CMAKE_CXX_STANDARD 17` (chi tiết trong `docs/VIO_FEASIBILITY_B.md`) |
+| `libceres-dev` | `2.2.0+dfsg-4.1ubuntu2` | Ubuntu 24.04 apt (`ceres::Manifold`) |
+| `libgoogle-glog-dev` | `0.6.0-2.1build1` | Ubuntu 24.04 apt |
+| `libgflags-dev` | `2.2.2-2build1` | Ubuntu 24.04 apt |
+| `libsuitesparse-dev` | `1:7.6.1+dfsg-1build1` | Ubuntu 24.04 apt |
+
+## 5. Hạng mục chờ chốt ở các mốc tiếp theo
+
 - **`depthai-ros` (OAK-D Pro W):** Chưa cài (triển khai khi tích hợp driver cảm biến).
