@@ -38,7 +38,7 @@ jobs:
       - name: Install Python test dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3-yaml python3-pytest
+          apt-get install -y --no-install-recommends python3-yaml python3-pytest ros-jazzy-rosbag2-py ros-jazzy-rosidl-runtime-py
       - name: Build and test L2 ROS 2 Jazzy workspace
         run: |
           set -e

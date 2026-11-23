@@ -28,8 +28,8 @@ def _read_cpu_temp_c() -> float:
 class SystemMonitorNode(Node):
     """Aggregates node liveness into 1 Hz /system/health for mavlink_bridge & mission_fsm."""
 
-    def __init__(self) -> None:
-        super().__init__('system_monitor')
+    def __init__(self, **kwargs) -> None:
+        super().__init__('system_monitor', **kwargs)
         self.declare_parameter('usb3_camera_ok', True)
         self.declare_parameter('heartbeat_timeout_s', 3.0)
         self.declare_parameter('publish_period_s', 1.0)

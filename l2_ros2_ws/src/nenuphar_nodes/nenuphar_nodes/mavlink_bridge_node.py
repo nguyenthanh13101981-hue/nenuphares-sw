@@ -1,7 +1,7 @@
 """MAVLink 2 bridge forwarding L2 heartbeat, VIO ODOMETRY, and EKF commands to L1."""
 
 import time
-from typing import Optional
+from typing import List, Optional
 
 from nav_msgs.msg import Odometry
 from nenuphar_msgs.msg import (
@@ -11,7 +11,7 @@ from nenuphar_msgs.msg import (
     MissionState,
     SystemHealth,
 )
-from std_msgs.msg import UInt64
+from std_msgs.msg import Float64, UInt64
 
 from nenuphar_nodes.base_node import (
     MAVLINK_HEARTBEAT_TX_TOPIC,
@@ -21,6 +21,7 @@ from nenuphar_nodes.base_node import (
 from nenuphar_nodes.qos import CMD_QOS, SENSOR_QOS
 
 MAV_CMD_SET_EKF_SOURCE_SET = 42007
+E2E_LATENCY_TOPIC = '/mavlink/e2e_latency_ms'
 
 
 def parse_signing_key(hex_key: str) -> bytes:
@@ -67,6 +68,7 @@ class MavlinkBridgeNode(MonitoredNode):
         self.tx_heartbeat_count = 0
         self.tx_odom_count = 0
         self.tx_setpoint_count = 0
+        self.e2e_latencies_ms: List[float] = []
         self.last_ekf_source_set: Optional[int] = None
         self.last_health: Optional[SystemHealth] = None
 
@@ -92,6 +94,16 @@ class MavlinkBridgeNode(MonitoredNode):
         self.hb_tx_pub = self.create_publisher(
             UInt64, MAVLINK_HEARTBEAT_TX_TOPIC, CMD_QOS
         )
+        self.latency_pub = self.create_publisher(
+            Float64, E2E_LATENCY_TOPIC, SENSOR_QOS
+        )
+
+    def enable_signing(self, signing_hex: str, link_id: int = 0) -> None:
+        """Activate strict MAVLink 2 signing on an established connection."""
+        if self._mav is None:
+            raise RuntimeError('MAVLink connection is not initialized')
+        configure_mavlink2_signing(self._mav, parse_signing_key(signing_hex), link_id=link_id)
+        self.signing_enabled = True
 
     def send_ekf_source_set(self, source_set: int) -> None:
         """Send MAV_CMD_SET_EKF_SOURCE_SET (1=GNSS, 2=VIO ODOMETRY) to Pixhawk L1."""
@@ -137,6 +149,17 @@ class MavlinkBridgeNode(MonitoredNode):
 
     def _on_setpoint(self, msg: GuidedSetpoint) -> None:
         self.tx_setpoint_count += 1
+        if msg.stamp.sec > 0 or msg.stamp.nanosec > 0:
+            now_ns = self.get_clock().now().nanoseconds
+            src_ns = int(msg.stamp.sec) * 1_000_000_000 + int(msg.stamp.nanosec)
+            latency_ms = max(0.0, (now_ns - src_ns) / 1e6)
+            self.e2e_latencies_ms.append(latency_ms)
+            if len(self.e2e_latencies_ms) > 2000:
+                self.e2e_latencies_ms.pop(0)
+            lat_msg = Float64()
+            lat_msg.data = latency_ms
+            self.latency_pub.publish(lat_msg)
+
         if self._mav is not None:
             from pymavlink import mavutil
 

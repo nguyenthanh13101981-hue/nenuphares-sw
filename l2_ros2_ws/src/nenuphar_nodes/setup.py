@@ -33,6 +33,7 @@ setup(
             'mavlink_bridge = nenuphar_nodes.mavlink_bridge_node:main',
             'blackbox = nenuphar_nodes.blackbox_node:main',
             'system_monitor = nenuphar_nodes.system_monitor_node:main',
+            'latency_probe = nenuphar_nodes.latency_probe:main',
         ],
     },
 )

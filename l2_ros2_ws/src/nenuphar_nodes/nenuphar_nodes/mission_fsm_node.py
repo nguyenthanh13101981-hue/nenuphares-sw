@@ -46,6 +46,7 @@ class MissionFsmNode(MonitoredNode):
             all_nodes_alive=False,
         )
         self.last_output = self.engine.step(self.inputs)
+        self._last_obstacle_stamp = None
 
         self.odom_sub = self.create_subscription(
             Odometry, '/vio/odometry', self._on_odom, SENSOR_QOS
@@ -93,7 +94,10 @@ class MissionFsmNode(MonitoredNode):
 
     def _on_obstacles(self, msg: ObstacleArray) -> None:
         self.inputs.obstacle_detected = len(msg.obstacles) > 0
+        self._last_obstacle_stamp = msg.stamp
         self._step_and_publish_on_change()
+        # Propagate source frame timestamp immediately for A.11 latency tracking.
+        self._publish_setpoint(source_stamp=msg.stamp)
 
     def _on_clearance(self, msg: BridgeClearance) -> None:
         self.inputs.bridge_clearance_ready = True
@@ -132,9 +136,9 @@ class MissionFsmNode(MonitoredNode):
         msg.hold_all_req = self.last_output.hold_all_req
         self.state_pub.publish(msg)
 
-    def _publish_setpoint(self) -> None:
+    def _publish_setpoint(self, source_stamp=None) -> None:
         sp = GuidedSetpoint()
-        sp.stamp = self.now_msg()
+        sp.stamp = source_stamp if source_stamp is not None else self.now_msg()
         sp.max_speed_mps = float(self.last_output.max_speed_mps)
         sp.hold_position = bool(self.last_output.hold_position)
         self.setpoint_pub.publish(sp)
