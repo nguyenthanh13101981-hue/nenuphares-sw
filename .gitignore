@@ -10,4 +10,4 @@ __pycache__/
 *.mcap
 .vscode/
 *.swp
-demo_output/
+!demo_output/**/*.db3

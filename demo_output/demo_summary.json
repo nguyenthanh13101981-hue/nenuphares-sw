@@ -1,0 +1,113 @@
+{
+  "duration_s": 55.0,
+  "fps": 25,
+  "telemetry_rows": 1376,
+  "ros2_nodes_count": 11,
+  "ekf_switch_s5_vio_accepted": true,
+  "ekf_switch_s6_gnss_accepted": true,
+  "c8_latched_stopped_after_lora_run_attempt": true,
+  "final_sitl_mix_mode": 2,
+  "final_sitl_curr_lim_a": 40.0,
+  "latency_stats": {
+    "count": 386.0,
+    "mean_ms": 12.461767686528498,
+    "p50_ms": 4.922834,
+    "p95_ms": 11.572695999999999,
+    "p99_ms": 26.613458799999997,
+    "max_ms": 2823.15258
+  },
+  "a11_budget": {
+    "l2_pipeline_p99_ms": 26.613458799999997,
+    "l2_budget_ms": 65.0,
+    "l2_within_budget": true,
+    "camera_hw_worst_case_ms": 93.0,
+    "l1_and_dshot_ms": 21.0,
+    "total_e2e_worst_case_ms": 140.6134588,
+    "tr41_budget_ms": 200.0,
+    "tr41_pass": true
+  },
+  "events": [
+    {
+      "t_s": 3.0,
+      "code": "S0->S1",
+      "label": "Rời bến — Tuần tra Z1"
+    },
+    {
+      "t_s": 13.0,
+      "code": "S2",
+      "label": "Phát hiện vật cản -> Lách an toàn"
+    },
+    {
+      "t_s": 21.0,
+      "code": "S3",
+      "label": "Tiếp cận cầu (<= 2 km/h)"
+    },
+    {
+      "t_s": 24.0,
+      "code": "S4",
+      "label": "Đo tĩnh không S4 (2.85 m, ±3 cm)"
+    },
+    {
+      "t_s": 27.0,
+      "code": "S5",
+      "label": "Qua gầm cầu — Mất GNSS -> VIO"
+    },
+    {
+      "t_s": 34.0,
+      "code": "S6->S1",
+      "label": "Thoát cầu — Khóa lại GNSS (Z2)"
+    },
+    {
+      "t_s": 36.52,
+      "code": "M1->M2",
+      "label": "Hỏng thruster Trái -> M2 (40 A)"
+    },
+    {
+      "t_s": 39.52,
+      "code": "BLE_OFF",
+      "label": "Mất BLE BMS — Chỉ cảnh báo (TBD-23)"
+    },
+    {
+      "t_s": 43.0,
+      "code": "WARN",
+      "label": "Pin xuống ngưỡng WARN (~28%)"
+    },
+    {
+      "t_s": 45.52,
+      "code": "RTB S10",
+      "label": "Pin ~21% -> RTB S10 quay về bến"
+    },
+    {
+      "t_s": 51.52,
+      "code": "E-STOP",
+      "label": "LoRa STOP -> C8 STOPPED & S9"
+    }
+  ],
+  "a13_test_summary": {
+    "L0 Bo C8\n(GTest)": {
+      "passed": 6,
+      "total": 6,
+      "note": "30/30 E-stop"
+    },
+    "L1 Lua\n(SITL)": {
+      "passed": 4,
+      "total": 4,
+      "note": "M1-M4, 70/40A, WD, EKF"
+    },
+    "L2 ROS 2\n(colcon)": {
+      "passed": 17,
+      "total": 17,
+      "note": "11 node, QoS, bag"
+    },
+    "SITL Phủ\nbảng A.8": {
+      "passed": 41,
+      "total": 41,
+      "note": "0 lỗi ngoài bảng"
+    },
+    "Tiêm lỗi\nGĐ 6": {
+      "passed": 4,
+      "total": 4,
+      "note": "USB3, BLE, WD, LoRa"
+    }
+  }
+}
