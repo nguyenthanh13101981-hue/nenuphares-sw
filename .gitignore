@@ -10,3 +10,4 @@ __pycache__/
 *.mcap
 .vscode/
 *.swp
+demo_output/
