@@ -1,9 +1,15 @@
 param_group,param_name,target_layer,initial_value,sitl_value,l0_value,l1_value,status,notes
-ekf,ekf_source_switch_threshold,L1/L2,TBD,,,,pending_sitl,TBD-20: Nguong chuyen nguon EKF GNSS <-> VIO ODOMETRY duoi cau
-corridor,lateral_deviation_alert_m,L2,0.15,,,,pending_sitl,D-16: Nguong canh bao lech hanh lang Z1/Z2 (> 15 cm)
-fsm,s3_s6_timeout_s,L2,TBD,,,,pending_sitl,TBD-20: Timeout chuyen trang thai S3/S6
-lua_current_limit,total_current_limit_normal_a,L1,70.0,,,,pending_l1,A.7: Gioi han dong tong che do binh thuong (A)
-lua_current_limit,total_current_limit_backup_a,L1,40.0,,,,pending_l1,A.7: Gioi han dong tong che do du phong (A)
-battery,BATT_CRT_VOLT,L1,11.5,,,,pending_l1,A.7/A.9: Nguong cat pin mem tang L1 (11.5-12.0 V)
-battery,voltage_compensation_gain,L1/L2,TBD,,,,pending_l1,TBD-20: Tham so bu ap he thong dong luc
-raft_geometry,active_raft_profile,L1/L2,v1_70x50,,,,pending_gst,TBD-06/RI-1.5: Chon v1_70x50 hoac v1_98x68 sau thu nghiem G-ST
+ekf,EK3_SRC1_YAW,L1,2,2,,,sitl_verified,A.7: Huong mui tu GNSS 2 ang-ten (khong dung compass)
+ekf,EK3_SRC2_POSXY_VELXY_YAW,L1,6,6,,,sitl_verified,TBD-20: Nguon EKF 2 dung VIO ODOMETRY (VISO_TYPE=1) chuyen bang MAV_CMD_SET_EKF_SOURCE_SET(2)
+ekf,ekf_source_switch_threshold,L1/L2,SIM_GPS1_ENABLE=0,verified_on_gnss_loss,,,sitl_verified,TBD-20: Chuyen nguon EKF GNSS <-> VIO ODOMETRY duoi cau; tinh chinh nguong HDOP/num_sats tai L1
+corridor,lateral_deviation_alert_m,L2,0.15,0.15,,,sitl_verified,D-16: Nguong canh bao lech hanh lang Z1/Z2 (> 15 cm)
+fsm,s3_s6_timeout_s,L2,TBD,,,,pending_stage5,TBD-20: Timeout chuyen trang thai S3/S6 (se chot tai Giai doan 5)
+l1_failsafe,FS_TIMEOUT,L1,3.0,3.0,,,sitl_verified,A.7: Rover 4.7.3 dung FS_TIMEOUT >= 3 s (khong co tham so GUID_TIMEOUT cua Copter)
+l1_failsafe,FS_GCS_TIMEOUT_normal_bridge,L1,5 / 30,5 / 30,,,sitl_verified,A.7 Lua: 5 s binh thuong; noi long 30 s trong BRIDGE_ZONE khi co BRIDGE_PERMIT=1
+l1_failsafe,l2_watchdog_timeout_s,L1,3.0,3.0,,,sitl_verified,A.7 Lua: Mat heartbeat Pi 5 (compid=191) > 3.0 s tu chuyen HOLD (mode 4)
+lua_current_limit,total_current_limit_normal_a,L1,70.0,70.0,,,sitl_verified,A.7 Lua: Gioi han dong tong M1 binh thuong (70 A; nen cong suat khi vuot)
+lua_current_limit,total_current_limit_backup_a,L1,40.0,40.0,,,sitl_verified,A.7 Lua: Gioi han dong tong M2/M3/M4 du phong (40 A; tran 30 A/ESC)
+sitl_env,SIM_TIDE_SPEED_and_SIM_WIND_SPD,L1,0.10,0.10,,,sitl_verified,Giai doan 4: Nhieu dong chay & gio 0.10 m/s tren SITL Boat
+battery,BATT_CRT_VOLT,L1,11.5,11.5,,,sitl_verified,A.7/A.9: Nguong cat pin mem tang L1 (11.5-12.0 V, cao hon BMS cung 10.0 V)
+battery,voltage_compensation_gain,L1/L2,TBD,,,,pending_l1,TBD-20: Tham so bu ap he thong dong luc (do tren phan cung L1)
+raft_geometry,active_raft_profile,L1/L2,v1_70x50,v1_70x50,,,pending_gst,TBD-06/RI-1.5: Chon v1_70x50 hoac v1_98x68 sau thu nghiem G-ST

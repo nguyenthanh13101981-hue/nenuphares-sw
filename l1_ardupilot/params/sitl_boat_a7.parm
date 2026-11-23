@@ -1,0 +1,40 @@
+# Tham so SITL khung Boat theo Bang A.7 (CdCT Final 2.0 - Giai doan 4 / Tuan 2)
+# Khung thuyen, 50 Hz, khong dung compass, dinh huong GNSS 2 ang-ten,
+# GUID_TIMEOUT >= 3 s, nhieu gio/dong chay 0.10 m/s, EKF source 2 VIO ODOMETRY,
+# Lua scripting (M1-M4, gioi han dong 70/40 A, watchdog Pi 5, khoa phep qua cau).
+
+FRAME_CLASS 2
+SCHED_LOOP_RATE 50
+# Luu y Rover 4.7.3: dung FS_TIMEOUT (khong co tham so GUID_TIMEOUT cua Copter);
+# watchdog Pi 5 Lua bo sung giam sat mat nhip L2 >= 3.0 s.
+FS_TIMEOUT 3.0
+FS_GCS_TIMEOUT 5
+BATT_CRT_VOLT 11.5
+
+# Cam la ban tu (Luat cung #2): lay huong tu GNSS
+COMPASS_USE 0
+COMPASS_USE2 0
+COMPASS_USE3 0
+SIM_GPS1_ENABLE 1
+SIM_GPS1_HDG 1
+EK3_SRC1_POSXY 3
+EK3_SRC1_VELXY 3
+EK3_SRC1_YAW 2
+
+# Nguon EKF thu 2: VIO ODOMETRY (ExternalNav = 6) khi mat GNSS duoi cau
+VISO_TYPE 1
+EK3_SRC2_POSXY 6
+EK3_SRC2_VELXY 6
+EK3_SRC2_YAW 6
+
+# Nhieu gio va dong chay 0.10 m/s tren SITL
+SIM_TIDE_SPEED 0.10
+SIM_TIDE_DIR 90
+SIM_WIND_SPD 0.10
+
+# Bat Lua scripting & mapping 3 ESC AM32 (Trai=94, Phai=95, Du phong duoi=96)
+SCR_ENABLE 1
+SCR_HEAP_SIZE 131072
+SERVO1_FUNCTION 94
+SERVO2_FUNCTION 95
+SERVO3_FUNCTION 96
