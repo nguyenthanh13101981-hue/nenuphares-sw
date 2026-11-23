@@ -3,7 +3,7 @@ ekf,EK3_SRC1_YAW,L1,2,2,,,sitl_verified,A.7: Huong mui tu GNSS 2 ang-ten (khong 
 ekf,EK3_SRC2_POSXY_VELXY_YAW,L1,6,6,,,sitl_verified,TBD-20: Nguon EKF 2 dung VIO ODOMETRY (VISO_TYPE=1) chuyen bang MAV_CMD_SET_EKF_SOURCE_SET(2)
 ekf,ekf_source_switch_threshold,L1/L2,SIM_GPS1_ENABLE=0,verified_on_gnss_loss,,,sitl_verified,TBD-20: Chuyen nguon EKF GNSS <-> VIO ODOMETRY duoi cau; tinh chinh nguong HDOP/num_sats tai L1
 corridor,lateral_deviation_alert_m,L2,0.15,0.15,,,sitl_verified,D-16: Nguong canh bao lech hanh lang Z1/Z2 (> 15 cm)
-fsm,s3_s6_timeout_s,L2,TBD,,,,pending_stage5,TBD-20: Timeout chuyen trang thai S3/S6 (se chot tai Giai doan 5)
+fsm,s3_s6_timeout_s,L2,30.0 / 20.0,30.0 / 20.0,,,sitl_verified,TBD-20: Timeout S3=30 s / S6=20 s chuyen ve S12 (DDKC) da kiem chung SITL Giai doan 5
 l1_failsafe,FS_TIMEOUT,L1,3.0,3.0,,,sitl_verified,A.7: Rover 4.7.3 dung FS_TIMEOUT >= 3 s (khong co tham so GUID_TIMEOUT cua Copter)
 l1_failsafe,FS_GCS_TIMEOUT_normal_bridge,L1,5 / 30,5 / 30,,,sitl_verified,A.7 Lua: 5 s binh thuong; noi long 30 s trong BRIDGE_ZONE khi co BRIDGE_PERMIT=1
 l1_failsafe,l2_watchdog_timeout_s,L1,3.0,3.0,,,sitl_verified,A.7 Lua: Mat heartbeat Pi 5 (compid=191) > 3.0 s tu chuyen HOLD (mode 4)

@@ -66,6 +66,7 @@ class MavlinkBridgeNode(MonitoredNode):
 
         self.tx_heartbeat_count = 0
         self.tx_odom_count = 0
+        self.tx_setpoint_count = 0
         self.last_ekf_source_set: Optional[int] = None
         self.last_health: Optional[SystemHealth] = None
 
@@ -134,8 +135,31 @@ class MavlinkBridgeNode(MonitoredNode):
     def _on_fsm_state(self, _msg: MissionState) -> None:
         pass
 
-    def _on_setpoint(self, _msg: GuidedSetpoint) -> None:
-        pass
+    def _on_setpoint(self, msg: GuidedSetpoint) -> None:
+        self.tx_setpoint_count += 1
+        if self._mav is not None:
+            from pymavlink import mavutil
+
+            # Type mask: position + yaw active (ignore velocity/accel/yaw_rate).
+            type_mask = 0x09F8 if not msg.hold_position else 0x0DF8
+            self._mav.mav.set_position_target_local_ned_send(
+                int(time.monotonic() * 1000) & 0xFFFFFFFF,
+                self._mav.target_system or 1,
+                self._mav.target_component or 1,
+                mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+                type_mask,
+                float(msg.north_m),
+                float(msg.east_m),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                float(msg.yaw_rad),
+                0.0,
+            )
 
     def _on_clearance(self, _msg: BridgeClearance) -> None:
         pass
