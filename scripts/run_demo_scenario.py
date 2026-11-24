@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-"""Integrated 5-scenario live demo runner: ArduPilot Boat SITL + 11 ROS 2 nodes + L0 C8 C++.
+"""Illustrative 5-scenario demo runner (SCRIPTED trajectory/SoC/events for visualization).
 
-Runs a ~55 s continuous mission exercising all 5 scenarios requested for faculty demonstration:
-  1. S0 precheck -> S1 nominal patrol in corridor Z1 (GNSS, M1 70 A, C8 ARMED).
-  2. Obstacle detection (Config A 400P) -> S2 safe obstacle avoidance -> S1.
-  3. Bridge approach S3 -> S4 clearance (Config B 800P) -> S5 under bridge (GNSS off,
-     EKF switch to VIO ODOMETRY 25 Hz, BRIDGE_ZONE on) -> S6 exit -> S1 in Z2.
-  4. Left thruster fault (Lua M1 -> M2, 70 A -> 40 A with overcurrent compression) +
-     BMS Bluetooth LE loss (TBD-23 warn-only, raft continues).
-  5. Battery drop WARN (~28%) -> RTB S10 (~21%) returning to dock -> authenticated 12-byte
-     LoRa STOP packet to C++ C8 core -> latched STOPPED (EN ISO 13850) + S9 + SITL HOLD.
-
-Records CSV telemetry, A.11 latency samples, summary JSON, and a real rosbag2 in demo_output/.
+NOTE: Trajectory, SoC curve, and bridge/obstacle triggers in this script are scripted
+profiles to illustrate the 3-layer architecture and generate presentation visuals in
+demo_output/. Do NOT cite outputs from this script as closed-loop experimental hardware proof.
 """
 
 import csv
@@ -29,7 +21,7 @@ from typing import Dict, List, Tuple
 
 os.environ['MAVLINK20'] = '1'
 
-REPO_ROOT = Path('/home/nenuphar/nenuphares-sw')
+REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / 'l2_ros2_ws/src/nenuphar_nodes'))
 
 from pymavlink import mavutil  # noqa: E402
@@ -53,7 +45,7 @@ from nenuphar_nodes.energy_node import EnergyNode  # noqa: E402
 from nenuphar_nodes.formation_node import FormationNode  # noqa: E402
 from nenuphar_nodes.fsm_engine import (  # noqa: E402
     FsmInputs,
-    S0, S1, S2, S3, S4, S5, S6, S9, S10,
+    S0, S1, S2, S3, S4, S5, S6, S9, S10, S11,
 )
 from nenuphar_nodes.latency_probe import (  # noqa: E402
     compute_latency_stats,
@@ -118,11 +110,11 @@ int c8_step(
     float load_kg) {
   SafetyInput in;
   in.now_ms = now_ms;
-  in.arm_request = arm_req != 0;
+  in.manual_start_at_raft = arm_req != 0;
   in.keepalive_pulse = keepalive_pulse != 0;
   in.bridge_zone_refresh = bridge_zone_refresh != 0;
-  in.tilt_deg = tilt_deg;
-  in.load_kg = load_kg;
+  in.tilt = TiltSample{tilt_deg, 0.0f, now_ms, true};
+  in.load = LoadSample{load_kg, now_ms, true};
 
   if (lora_cmd_code == 1 || lora_cmd_code == 2 || lora_cmd_code == 3) {
     uint8_t pkt[kLoraPacketSize]{};
@@ -381,7 +373,7 @@ def main() -> int:
         geom = PerceptionGeomNode()
         clearance = ClearanceNode()
         fsm = MissionFsmNode()
-        corridor = CorridorMonitorNode(parameter_overrides=[Parameter('z2_start_x_m', value=46.0)])
+        corridor = CorridorMonitorNode()
         formation = FormationNode()
         energy = EnergyNode(parameter_overrides=[Parameter('stub_soc_pct', value=84.0)])
         bridge = MavlinkBridgeNode(
@@ -390,6 +382,7 @@ def main() -> int:
         blackbox = BlackboxNode()
         sysmon = SystemMonitorNode(
             parameter_overrides=[
+                Parameter('usb3_check_mode', value='param'),
                 Parameter('usb3_camera_ok', value=True),
                 Parameter('publish_period_s', value=0.5),
             ]
@@ -523,10 +516,10 @@ def main() -> int:
                 events.append({'t_s': t_sim, 'code': 'S0->S1', 'label': 'Rời bến — Tuần tra Z1'})
             if t_sim >= 13.0 and 'obs' not in triggered:
                 triggered.add('obs')
-                events.append({'t_s': t_sim, 'code': 'S2', 'label': 'Phát hiện vật cản -> Lách an toàn'})
+                events.append({'t_s': t_sim, 'code': 'S11', 'label': 'Phát hiện vật cản -> Lách S11'})
             if t_sim >= 21.0 and 'bridge_app' not in triggered:
                 triggered.add('bridge_app')
-                events.append({'t_s': t_sim, 'code': 'S3', 'label': 'Tiếp cận cầu (<= 2 km/h)'})
+                events.append({'t_s': t_sim, 'code': 'S2/S3', 'label': 'Tiếp cận & Canh giữa cầu (<= 2 km/h)'})
             if t_sim >= 24.0 and 'bridge_s4' not in triggered:
                 triggered.add('bridge_s4')
                 _set_param(master, 'SCR_USER4', 1.0)  # BRIDGE_PERMIT = 1
@@ -583,7 +576,10 @@ def main() -> int:
                 last_keepalive_t = t_sim
             bridge_zone_refresh = 1 if (24.0 <= t_sim < 34.0) else 0
             lora_cmd = 0
-            if t_sim >= 51.5 and 'c8_lora_stop_sent' not in triggered:
+            if t_sim >= 1.4 and 'c8_lora_run_init' not in triggered:
+                triggered.add('c8_lora_run_init')
+                lora_cmd = 1
+            elif t_sim >= 51.5 and 'c8_lora_stop_sent' not in triggered:
                 triggered.add('c8_lora_stop_sent')
                 lora_cmd = 2  # Authenticated 12-byte LoRa STOP
             elif t_sim >= 53.5 and 'c8_lora_run_attempt' not in triggered:
@@ -612,8 +608,10 @@ def main() -> int:
                 all_nodes_alive=True,
                 start_mission=(t_sim >= 3.0),
                 obstacle_detected=(13.0 <= t_sim < 21.0),
+                obstacle_gap_m=1.50,
                 bridge_detected=(21.0 <= t_sim < 24.0),
-                at_bridge_measure_point=(24.0 <= t_sim < 27.0),
+                at_bridge_centering=(22.0 <= t_sim < 24.0),
+                bridge_centered=(24.0 <= t_sim < 27.0),
                 bridge_clearance_ready=(27.0 <= t_sim < 34.0),
                 bridge_pass_permitted=(27.0 <= t_sim < 34.0),
                 bridge_exited=(34.0 <= t_sim < 36.0),

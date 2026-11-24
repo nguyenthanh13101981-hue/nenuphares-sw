@@ -58,23 +58,28 @@ def evaluate_a11_budget(
     l2_pipeline_p99_ms: float,
     l1_roundtrip_ms: float = A11_L1_AUTOPILOT_MS,
     include_camera_hw_worst_case: bool = True,
+    l2_pipeline_max_ms: float = 0.0,
 ) -> Dict[str, Any]:
-    """Evaluate measured L2 P99 latency against TR-4.1 (<= 200 ms) Config A budget."""
+    """Evaluate measured L2 P99 & max latency against TR-4.1 (<= 200 ms) Config A budget."""
     hw_ms = (
         A11_FRAME_WAIT_MAX_MS + A11_HALF_EXPOSURE_MAX_MS + A11_OAKD_CONFIG_A_MS
         if include_camera_hw_worst_case
         else 0.0
     )
     total_worst_case_ms = hw_ms + float(l2_pipeline_p99_ms) + float(l1_roundtrip_ms) + A11_DSHOT_ESC_MS
+    max_e2e_ms = hw_ms + float(l2_pipeline_max_ms) + float(l1_roundtrip_ms) + A11_DSHOT_ESC_MS
     return {
         'l2_pipeline_p99_ms': float(l2_pipeline_p99_ms),
+        'l2_pipeline_max_ms': float(l2_pipeline_max_ms),
         'l2_budget_ms': L2_PIPELINE_BUDGET_MS,
         'l2_within_budget': float(l2_pipeline_p99_ms) <= L2_PIPELINE_BUDGET_MS,
         'camera_hw_worst_case_ms': hw_ms,
         'l1_and_dshot_ms': float(l1_roundtrip_ms) + A11_DSHOT_ESC_MS,
         'total_e2e_worst_case_ms': total_worst_case_ms,
+        'total_e2e_max_ms': max_e2e_ms,
         'tr41_budget_ms': TR41_BUDGET_MS,
         'tr41_pass': total_worst_case_ms <= TR41_BUDGET_MS,
+        'max_within_tr41': max_e2e_ms <= TR41_BUDGET_MS,
     }
 
 
@@ -100,7 +105,9 @@ def main(args=None) -> None:
         stats = compute_latency_stats(samples)
         report = {
             'stats': stats,
-            'a11_budget': evaluate_a11_budget(stats['p99_ms']),
+            'a11_budget': evaluate_a11_budget(
+                stats['p99_ms'], l2_pipeline_max_ms=stats['max_ms']
+            ),
         }
         print(json.dumps(report, indent=2))
         if not report['a11_budget']['tr41_pass']:

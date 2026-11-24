@@ -32,23 +32,23 @@ import numpy as np  # noqa: E402
 plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['axes.unicode_minus'] = False
 
-REPO_ROOT = Path('/home/nenuphar/nenuphares-sw')
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEMO_OUT = REPO_ROOT / 'demo_output'
 
 STATE_LABELS_VI: Dict[int, str] = {
     0: 'S0 — Khởi tạo & Kiểm tra USB 3',
-    1: 'S1 — Tuần tra hành lang',
-    2: 'S2 — Lách vật cản (Config A)',
-    3: 'S3 — Tiếp cận vòm cầu (≤ 2 km/h)',
+    1: 'S1 — Tuần tra hành lang (Z1)',
+    2: 'S2 — Tiếp cận cầu (<= 2 km/h)',
+    3: 'S3 — Canh giữa hai thành cầu (±25 cm)',
     4: 'S4 — Đo tĩnh không (Config B 800P)',
     5: 'S5 — Qua gầm cầu (Nguồn VIO)',
     6: 'S6 — Thoát cầu & Khóa lại GNSS',
-    7: 'S7 — Đồng bộ / Giữ đội hình',
-    8: 'S8 — Giữ vị trí khẩn (Tầng 3)',
+    7: 'S7 — Chờ / Hold',
+    8: 'S8 — Rời gầm cầu khẩn (còn lực đẩy)',
     9: 'S9 — DỪNG KHẨN CẤP (Ưu tiên #1)',
     10: 'S10 — RTB Quay về bến',
-    11: 'S11 — Cập bến / Chờ',
-    12: 'S12 — Điểm dừng khẩn cấp ĐDKC',
+    11: 'S11 — Lách vật cản (Config A, Z2)',
+    12: 'S12 — Điểm dừng khẩn cấp ĐDKC (Bậc 2)',
 }
 
 STATE_COLORS: Dict[int, str] = {

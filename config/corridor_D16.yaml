@@ -1,14 +1,27 @@
-# Cấu hình giám sát hành lang Z1/Z2 (D-16) & đo cầu S4 / tránh vật cản TR-4.1
+# Cấu hình giám sát hành lang Z1/Z2 (TR-4.16 / D-16) & đo cầu S4 / tránh vật cản TR-4.1
 
 corridor:
   monitor_rate_hz: 10.0
   zones:
     - Z1
     - Z2
-  lateral_deviation_alert_m: 0.15
+  z1_half_width_m: 0.30
+  z1_correction_max_m: 0.50
+  z1_excursion_timeout_s: 5.0
+  z1_max_retries: 1
+  z2_half_width_m: 1.25
+  obstacle_min_gap_m: 1.35
+  bridge_approach_dist_m: 10.0
+  bridge_centering_tol_m: 0.25
+  lateral_deviation_alert_m: 0.30
+  waypoints:
+    - [0.0, 0.0]
+    - [200.0, 0.0]
 
 bridge_s4:
   max_speed_kmh: 2.0
+  min_margin_above_raft_m: 0.10
+  db_tolerance_m: 0.05
   consensus_spread_max_m: 0.05
   depth_config: config_b_800p
   bridge_zone_refresh_max_s: 60.0

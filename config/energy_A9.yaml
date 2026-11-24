@@ -6,11 +6,13 @@ energy_management:
   total_capacity_wh: 1280.0      # 2 x 640 Wh LFP
   stop_reserve_wh: 128.0         # 10% dự trữ cứng không xâm phạm
   safety_margin_wh: 64.0         # 5% dự phòng bù dòng/gió
-  warn_soc_pct: 28.0             # Ngưỡng cảnh báo WARN
+  warn_soc_pct: 28.0             # Ngưỡng vào cảnh báo WARN (A.9.3)
+  warn_clear_soc_pct: 30.0       # Ngưỡng thoát WARN có độ trễ hysteresis (A.9.3)
   warn_wh_p95_2km: 227.3         # Ở P95 = 122 W, cự ly 2 km
   rtb_soc_pct: 21.0              # Ngưỡng quay về bến RTB (S10)
   rtb_wh_p95_2km: 145.7
-  stop_soc_pct: 10.0             # Ngưỡng dừng STOP (BATT_CRT)
+  stop_soc_pct: 10.0             # Ngưỡng về ĐDKC S12 (khi còn lực đẩy) / dừng S9 (nếu mất đẩy)
+  stop_target_state: S12
   l1_batt_crt_v_min: 11.5
   l1_batt_crt_v_max: 12.0
   bms_hw_cutoff_v: 10.0

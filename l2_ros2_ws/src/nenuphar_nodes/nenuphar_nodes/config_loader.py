@@ -1,10 +1,26 @@
-"""Configuration loader for raft geometry, energy, and corridor YAML files."""
+"""Configuration and CdCT specification loader (no hardcoded local home paths)."""
 
 import os
 from pathlib import Path
 from typing import Any, Dict
 
 import yaml
+
+
+def find_repo_root() -> Path:
+    """Locate repository root containing config/raft_profiles without hardcoded home paths."""
+    env_dir = os.environ.get('NENUPHAR_CONFIG_DIR')
+    if env_dir:
+        candidate = Path(env_dir).resolve()
+        if candidate.is_dir():
+            return candidate.parent
+
+    search_roots = [Path(__file__).resolve(), Path.cwd().resolve()]
+    for root in search_roots:
+        for parent in (root, *root.parents):
+            if (parent / 'config' / 'raft_profiles').is_dir():
+                return parent
+    raise FileNotFoundError('Could not locate repository root with config/raft_profiles')
 
 
 def find_config_dir() -> Path:
@@ -15,17 +31,7 @@ def find_config_dir() -> Path:
         if candidate.is_dir():
             return candidate
 
-    search_roots = [Path(__file__).resolve(), Path.cwd().resolve()]
-    for root in search_roots:
-        for parent in (root, *root.parents):
-            candidate = parent / 'config'
-            if (candidate / 'raft_profiles').is_dir():
-                return candidate
-
-    fallback = Path('/home/nenuphar/nenuphares-sw/config')
-    if fallback.is_dir():
-        return fallback
-    raise FileNotFoundError('Could not locate nenuphares-sw/config directory')
+    return find_repo_root() / 'config'
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -48,5 +54,10 @@ def load_energy_config() -> Dict[str, Any]:
 
 
 def load_corridor_config() -> Dict[str, Any]:
-    """Load D-16 corridor and S4/TR-4.1 bridge/obstacle thresholds."""
+    """Load TR-4.16 / D-16 corridor and S4/TR-4.1 bridge/obstacle thresholds."""
     return _load_yaml(find_config_dir() / 'corridor_D16.yaml')
+
+
+def load_cdct_spec() -> Dict[str, Any]:
+    """Load machine-readable CdCT Final 2.0 spec (docs/cdct_spec_a8_a10.yaml)."""
+    return _load_yaml(find_repo_root() / 'docs' / 'cdct_spec_a8_a10.yaml')

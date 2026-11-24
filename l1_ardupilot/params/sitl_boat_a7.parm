@@ -1,17 +1,32 @@
-# Tham so SITL khung Boat theo Bang A.7 (CdCT Final 2.0 - Giai doan 4 / Tuan 2)
+# Tham so SITL khung Boat theo Bang A.7 (CdCT Final 2.0 - L1 Pixhawk 6C / ArduPilot Rover 4.7.3)
 # Khung thuyen, 50 Hz, khong dung compass, dinh huong GNSS 2 ang-ten,
-# GUID_TIMEOUT >= 3 s, nhieu gio/dong chay 0.10 m/s, EKF source 2 VIO ODOMETRY,
-# Lua scripting (M1-M4, gioi han dong 70/40 A, watchdog Pi 5, khoa phep qua cau).
+# failsafe pin/GCS/geofence co hanh dong that, EKF source 2 VIO ODOMETRY,
+# Lua scripting (M1-M4, loc gioi han dong 70/40 A, go rong <= 3 chu ky, watchdog Pi 5, khoa phep qua cau).
 
 FRAME_CLASS 2
 SCHED_LOOP_RATE 50
-# Luu y Rover 4.7.3: dung FS_TIMEOUT (khong co tham so GUID_TIMEOUT cua Copter);
-# watchdog Pi 5 Lua bo sung giam sat mat nhip L2 >= 3.0 s.
-FS_TIMEOUT 3.0
-FS_GCS_TIMEOUT 5
-BATT_CRT_VOLT 11.5
 
-# Cam la ban tu (Luat cung #2): lay huong tu GNSS
+# Failsafe Rover 4.7.3 (A.7 / A.10): co hanh dong cu the (2 = Hold, 1 = RTL)
+FS_TIMEOUT 3.0
+FS_ACTION 2
+FS_GCS_ENABLE 1
+FS_GCS_TIMEOUT 5
+
+# Giam sat pin bang shunt (Analog Voltage & Current = 4) + hanh dong failsafe
+BATT_MONITOR 4
+BATT_LOW_VOLT 12.2
+BATT_FS_LOW_ACT 1
+BATT_CRT_VOLT 11.5
+BATT_FS_CRT_ACT 2
+
+# Geofence hanh lang & vung cau -> Hold (2); tren thuc dia bat them polygon (FENCE_TYPE 6)
+FENCE_ENABLE 1
+FENCE_TYPE 2
+FENCE_RADIUS 300
+FENCE_ACTION 2
+
+# Cam la ban tu (Luat cung #2): lay huong tu GNSS 2 ang-ten
+# Tren phan cung that (HIL): cau hinh GPS1_TYPE=17 / GPS2_TYPE=18 (moving baseline) & GPS1_POS / GPS2_POS
 COMPASS_USE 0
 COMPASS_USE2 0
 COMPASS_USE3 0

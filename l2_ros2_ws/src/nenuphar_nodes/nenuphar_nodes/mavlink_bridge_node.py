@@ -1,4 +1,4 @@
-"""MAVLink 2 bridge forwarding L2 heartbeat, VIO ODOMETRY, and EKF commands to L1."""
+"""MAVLink 2 bidirectional bridge forwarding L2 <-> L1 and keepalive/BRIDGE_ZONE to C8."""
 
 import time
 from typing import List, Optional
@@ -11,17 +11,21 @@ from nenuphar_msgs.msg import (
     MissionState,
     SystemHealth,
 )
-from std_msgs.msg import Float64, UInt64
+from std_msgs.msg import Float64, String, UInt64
 
 from nenuphar_nodes.base_node import (
     MAVLINK_HEARTBEAT_TX_TOPIC,
     MonitoredNode,
     run_node_main,
 )
+from nenuphar_nodes.fsm_engine import S4, S5, S7, S8, S9
+from nenuphar_nodes.mavlink_transforms import ros_enu_odom_to_mavlink_ned
 from nenuphar_nodes.qos import CMD_QOS, SENSOR_QOS
 
+MAV_CMD_DO_CHANGE_SPEED = 178
 MAV_CMD_SET_EKF_SOURCE_SET = 42007
 E2E_LATENCY_TOPIC = '/mavlink/e2e_latency_ms'
+C8_TX_TOPIC = '/c8/tx_signals'
 
 
 def parse_signing_key(hex_key: str) -> bytes:
@@ -41,7 +45,7 @@ def configure_mavlink2_signing(mav_conn, key_bytes: bytes, link_id: int = 0) -> 
 
 
 class MavlinkBridgeNode(MonitoredNode):
-    """Bridges /system/health, /vio/odometry, and bridge/EKF commands over MAVLink 2."""
+    """Bidirectional MAVLink 2 bridge (L2 <-> L1) + C8 keepalive/BRIDGE_ZONE emitter."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__('mavlink_bridge', **kwargs)
@@ -68,9 +72,16 @@ class MavlinkBridgeNode(MonitoredNode):
         self.tx_heartbeat_count = 0
         self.tx_odom_count = 0
         self.tx_setpoint_count = 0
+        self.tx_c8_keepalive_count = 0
+        self.tx_c8_bridge_zone_count = 0
         self.e2e_latencies_ms: List[float] = []
         self.last_ekf_source_set: Optional[int] = None
+        self.last_bridge_permit: Optional[bool] = None
+        self.last_bridge_zone: Optional[bool] = None
+        self.last_speed_cmd: Optional[float] = None
         self.last_health: Optional[SystemHealth] = None
+        self.l1_mode: Optional[int] = None
+        self._odom_reset_counter = 0
 
         self.health_sub = self.create_subscription(
             SystemHealth, '/system/health', self._on_health, CMD_QOS
@@ -97,6 +108,16 @@ class MavlinkBridgeNode(MonitoredNode):
         self.latency_pub = self.create_publisher(
             Float64, E2E_LATENCY_TOPIC, SENSOR_QOS
         )
+        self.c8_tx_pub = self.create_publisher(String, C8_TX_TOPIC, CMD_QOS)
+        self.l1_shunt_pub = self.create_publisher(
+            EnergyStatus, '/l1/battery_shunt', CMD_QOS
+        )
+        self.l1_odom_pub = self.create_publisher(
+            Odometry, '/l1/ekf_odom', SENSOR_QOS
+        )
+        self.operator_pub = self.create_publisher(String, '/operator/cmd', CMD_QOS)
+
+        self._rx_timer = self.create_timer(0.05, self._poll_mavlink_rx)
 
     def enable_signing(self, signing_hex: str, link_id: int = 0) -> None:
         """Activate strict MAVLink 2 signing on an established connection."""
@@ -104,6 +125,18 @@ class MavlinkBridgeNode(MonitoredNode):
             raise RuntimeError('MAVLink connection is not initialized')
         configure_mavlink2_signing(self._mav, parse_signing_key(signing_hex), link_id=link_id)
         self.signing_enabled = True
+
+    def _set_l1_param(self, name: str, value: float) -> None:
+        if self._mav is not None:
+            from pymavlink import mavutil
+
+            self._mav.mav.param_set_send(
+                self._mav.target_system or 1,
+                self._mav.target_component or 1,
+                name.encode('ascii'),
+                float(value),
+                mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
+            )
 
     def send_ekf_source_set(self, source_set: int) -> None:
         """Send MAV_CMD_SET_EKF_SOURCE_SET (1=GNSS, 2=VIO ODOMETRY) to Pixhawk L1."""
@@ -122,6 +155,29 @@ class MavlinkBridgeNode(MonitoredNode):
                 0.0,
                 0.0,
             )
+
+    def send_speed_limit(self, max_speed_mps: float) -> None:
+        """Send MAV_CMD_DO_CHANGE_SPEED to Pixhawk L1 when max_speed_mps updates."""
+        self.last_speed_cmd = float(max_speed_mps)
+        if self._mav is not None:
+            self._mav.mav.command_long_send(
+                self._mav.target_system or 1,
+                self._mav.target_component or 1,
+                MAV_CMD_DO_CHANGE_SPEED,
+                0,
+                1.0,  # ground speed
+                float(max_speed_mps),
+                -1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            )
+
+    def _emit_c8_signal(self, signal_name: str) -> None:
+        msg = String()
+        msg.data = signal_name
+        self.c8_tx_pub.publish(msg)
 
     def _on_health(self, msg: SystemHealth) -> None:
         self.last_health = msg
@@ -144,8 +200,33 @@ class MavlinkBridgeNode(MonitoredNode):
         tx_msg.data = self.tx_heartbeat_count
         self.hb_tx_pub.publish(tx_msg)
 
-    def _on_fsm_state(self, _msg: MissionState) -> None:
-        pass
+        # Forward 1 Hz keepalive to C8 only when system health is healthy.
+        if msg.all_nodes_alive:
+            self.tx_c8_keepalive_count += 1
+            self._emit_c8_signal('KEEPALIVE')
+
+    def _on_fsm_state(self, msg: MissionState) -> None:
+        # 1. Switch EKF source dynamically (2 = VIO under bridge S5/S8, 1 = GNSS elsewhere).
+        desired_ekf = 2 if msg.state in (S5, S8) else 1
+        if self.last_ekf_source_set != desired_ekf:
+            self.send_ekf_source_set(desired_ekf)
+
+        # 2. Sync BRIDGE_ZONE (SCR_USER5) & BRIDGE_PERMIT (SCR_USER4) to L1 Lua + C8.
+        desired_bz = msg.state in (S4, S5, S8)
+        desired_permit = bool(msg.bridge_permit)
+        if self.last_bridge_permit != desired_permit:
+            self.last_bridge_permit = desired_permit
+            self._set_l1_param('SCR_USER4', 1.0 if desired_permit else 0.0)
+        if self.last_bridge_zone != desired_bz:
+            self.last_bridge_zone = desired_bz
+            self._set_l1_param('SCR_USER5', 1.0 if desired_bz else 0.0)
+        if desired_bz:
+            self.tx_c8_bridge_zone_count += 1
+            self._emit_c8_signal('BRIDGE_ZONE')
+
+        # 3. Command HOLD mode on Pixhawk for S7/S9.
+        if self._mav is not None and msg.state in (S7, S9):
+            self._mav.set_mode(4)
 
     def _on_setpoint(self, msg: GuidedSetpoint) -> None:
         self.tx_setpoint_count += 1
@@ -159,6 +240,9 @@ class MavlinkBridgeNode(MonitoredNode):
             lat_msg = Float64()
             lat_msg.data = latency_ms
             self.latency_pub.publish(lat_msg)
+
+        if self.last_speed_cmd is None or abs(self.last_speed_cmd - float(msg.max_speed_mps)) > 1e-3:
+            self.send_speed_limit(float(msg.max_speed_mps))
 
         if self._mav is not None:
             from pymavlink import mavutil
@@ -192,34 +276,93 @@ class MavlinkBridgeNode(MonitoredNode):
 
     def _on_vio(self, msg: Odometry) -> None:
         self.tx_odom_count += 1
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation
+        v = msg.twist.twist.linear
+        w = msg.twist.twist.angular
+        payload = ros_enu_odom_to_mavlink_ned(
+            pos_enu=(p.x, p.y, p.z),
+            quat_xyzw_enu_flu=(q.x, q.y, q.z, q.w),
+            vel_flu=(v.x, v.y, v.z),
+            ang_vel_flu=(w.x, w.y, w.z),
+            stamp_sec=msg.header.stamp.sec,
+            stamp_nanosec=msg.header.stamp.nanosec,
+            pose_covariance_enu=list(msg.pose.covariance),
+            vel_covariance_flu=list(msg.twist.covariance),
+            reset_counter=self._odom_reset_counter,
+        )
         if self._mav is not None:
             from pymavlink import mavutil
 
-            p = msg.pose.pose.position
-            q = msg.pose.pose.orientation
-            v = msg.twist.twist.linear
-            w = msg.twist.twist.angular
-            cov = [float('nan')] + [0.0] * 20
             self._mav.mav.odometry_send(
-                int(time.time() * 1e6),
-                mavutil.mavlink.MAV_FRAME_LOCAL_FRD,
-                mavutil.mavlink.MAV_FRAME_BODY_FRD,
-                float(p.x),
-                float(p.y),
-                float(p.z),
-                [float(q.w or 1.0), float(q.x), float(q.y), float(q.z)],
-                float(v.x),
-                float(v.y),
-                float(v.z),
-                float(w.x),
-                float(w.y),
-                float(w.z),
-                cov,
-                cov,
-                0,
+                payload.time_usec,
+                payload.frame_id,
+                payload.child_frame_id,
+                payload.x_ned,
+                payload.y_ned,
+                payload.z_ned,
+                list(payload.q_wxyz),
+                payload.vx_frd,
+                payload.vy_frd,
+                payload.vz_frd,
+                payload.rollspeed_frd,
+                payload.pitchspeed_frd,
+                payload.yawspeed_frd,
+                payload.pose_covariance,
+                payload.velocity_covariance,
+                payload.reset_counter,
                 mavutil.mavlink.MAV_ESTIMATOR_TYPE_VIO,
                 100,
             )
+
+    def _handle_mavlink_msg(self, msg) -> None:
+        """Process inbound L1 telemetry & GCS operator commands (testable without socket)."""
+        mtype = msg.get_type()
+        if mtype == 'HEARTBEAT' and msg.get_srcComponent() == 1:
+            self.l1_mode = int(msg.custom_mode)
+        elif mtype == 'BATTERY_STATUS':
+            volts_mv = [v for v in getattr(msg, 'voltages', []) if 0 < v < 65535]
+            volt_v = (sum(volts_mv) / 1000.0) if volts_mv else 0.0
+            curr_ca = float(getattr(msg, 'current_battery', -1))
+            curr_a = (curr_ca / 100.0) if curr_ca >= 0 else 0.0
+            soc = float(getattr(msg, 'battery_remaining', -1))
+            out = EnergyStatus()
+            out.stamp = self.now_msg()
+            out.voltage_v = volt_v
+            out.current_a = curr_a
+            out.soc_pct = max(0.0, soc) if soc >= 0 else 100.0
+            self.l1_shunt_pub.publish(out)
+        elif mtype == 'LOCAL_POSITION_NED':
+            odom = Odometry()
+            odom.header.stamp = self.now_msg()
+            odom.header.frame_id = 'ned'
+            odom.pose.pose.position.x = float(msg.x)
+            odom.pose.pose.position.y = float(msg.y)
+            odom.pose.pose.position.z = float(msg.z)
+            self.l1_odom_pub.publish(odom)
+        elif mtype == 'COMMAND_LONG':
+            # Map user MAV_CMD_USER_1..5 (31010..31014) from QGC to /operator/cmd
+            cmd_id = int(getattr(msg, 'command', 0))
+            mapping = {
+                31010: 'START',
+                31011: 'HOLD',
+                31012: 'RTB',
+                31013: 'RESET',
+                31014: 'ESTOP',
+            }
+            if cmd_id in mapping:
+                op = String()
+                op.data = mapping[cmd_id]
+                self.operator_pub.publish(op)
+
+    def _poll_mavlink_rx(self) -> None:
+        if self._mav is None:
+            return
+        for _ in range(16):
+            msg = self._mav.recv_match(blocking=False)
+            if msg is None:
+                break
+            self._handle_mavlink_msg(msg)
 
 
 def main(args=None) -> None:

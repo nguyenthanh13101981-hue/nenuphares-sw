@@ -139,6 +139,27 @@ bool is_valid_cmd(uint8_t raw) {
 
 }  // namespace
 
+uint32_t RamCounterStorage::load_counter(uint8_t sender_id) const {
+  if (sender_id >= kMaxLoraSenders) {
+    return 0U;
+  }
+  return counters_[sender_id];
+}
+
+void RamCounterStorage::save_counter(uint8_t sender_id, uint32_t counter) {
+  if (sender_id < kMaxLoraSenders) {
+    counters_[sender_id] = counter;
+  }
+}
+
+uint32_t advance_boot_counter(uint32_t stored_counter, uint32_t jump) {
+  const uint64_t next = static_cast<uint64_t>(stored_counter) + static_cast<uint64_t>(jump);
+  if (next > 0xFFFFFFFFULL) {
+    return 0xFFFFFFFFU;
+  }
+  return static_cast<uint32_t>(next);
+}
+
 void compute_hmac_sha256(
     const uint8_t* key,
     size_t key_len,
@@ -146,7 +167,7 @@ void compute_hmac_sha256(
     size_t data_len,
     uint8_t out_digest[32]) {
   uint8_t key_block[64]{};
-  if (key_len > 64) {
+  if (key != nullptr && key_len > 64) {
     Sha256 hk;
     hk.update(key, key_len);
     hk.finish(key_block);
@@ -175,14 +196,17 @@ void compute_hmac_sha256(
   outer.finish(out_digest);
 }
 
-void encode_lora_packet(
+void encode_lora_packet_from_sender(
     LoraCmd cmd,
+    uint8_t sender_id,
     uint16_t group_id,
     uint32_t counter,
     const uint8_t* key,
     size_t key_len,
     uint8_t out_packet[kLoraPacketSize]) {
-  out_packet[0] = static_cast<uint8_t>(cmd);
+  const uint8_t masked_sender = static_cast<uint8_t>(sender_id & 0x0FU);
+  const uint8_t masked_cmd = static_cast<uint8_t>(static_cast<uint8_t>(cmd) & 0x0FU);
+  out_packet[0] = static_cast<uint8_t>((masked_sender << 4) | masked_cmd);
   out_packet[1] = static_cast<uint8_t>((group_id >> 8) & 0xFFU);
   out_packet[2] = static_cast<uint8_t>(group_id & 0xFFU);
   out_packet[3] = static_cast<uint8_t>((counter >> 24) & 0xFFU);
@@ -195,21 +219,62 @@ void encode_lora_packet(
   std::memcpy(out_packet + 7, digest, 5);
 }
 
+void encode_lora_packet(
+    LoraCmd cmd,
+    uint16_t group_id,
+    uint32_t counter,
+    const uint8_t* key,
+    size_t key_len,
+    uint8_t out_packet[kLoraPacketSize]) {
+  encode_lora_packet_from_sender(
+      cmd, 0U, group_id, counter, key, key_len, out_packet);
+}
+
 LoraVerifier::LoraVerifier(
     uint16_t local_group_id,
     const uint8_t* key,
     size_t key_len,
-    uint32_t initial_counter)
-    : local_group_id_(local_group_id),
-      key_len_(key_len > kMaxKeyLen ? kMaxKeyLen : key_len),
-      last_valid_counter_(initial_counter) {
-  if (key != nullptr && key_len_ > 0) {
+    uint32_t initial_counter,
+    CounterStorage* storage)
+    : local_group_id_(local_group_id), storage_(storage) {
+  if (key != nullptr && key_len > kMaxKeyLen) {
+    // Match RFC 2104 key reduction inside compute_hmac_sha256 for keys > 64 bytes.
+    Sha256 hk;
+    hk.update(key, key_len);
+    hk.finish(key_);
+    key_len_ = 32U;
+  } else if (key != nullptr && key_len > 0) {
+    key_len_ = key_len;
     std::memcpy(key_, key, key_len_);
+  }
+
+  for (size_t i = 0; i < kMaxLoraSenders; ++i) {
+    uint32_t c = initial_counter;
+    if (storage_ != nullptr) {
+      const uint32_t persisted = storage_->load_counter(static_cast<uint8_t>(i));
+      if (persisted > c) {
+        c = persisted;
+      }
+    }
+    last_valid_counters_[i] = c;
   }
 }
 
+uint32_t LoraVerifier::last_valid_counter(uint8_t sender_id) const {
+  if (sender_id >= kMaxLoraSenders) {
+    return 0U;
+  }
+  return last_valid_counters_[sender_id];
+}
+
 bool LoraVerifier::verify_and_parse(const uint8_t pkt[kLoraPacketSize], LoraPacket& out) {
-  if (pkt == nullptr || !is_valid_cmd(pkt[0])) {
+  if (pkt == nullptr) {
+    return false;
+  }
+
+  const uint8_t sender_id = static_cast<uint8_t>((pkt[0] >> 4) & 0x0FU);
+  const uint8_t cmd_raw = static_cast<uint8_t>(pkt[0] & 0x0FU);
+  if (!is_valid_cmd(cmd_raw)) {
     return false;
   }
 
@@ -223,7 +288,7 @@ bool LoraVerifier::verify_and_parse(const uint8_t pkt[kLoraPacketSize], LoraPack
                            (static_cast<uint32_t>(pkt[4]) << 16) |
                            (static_cast<uint32_t>(pkt[5]) << 8) |
                            static_cast<uint32_t>(pkt[6]);
-  if (counter <= last_valid_counter_) {
+  if (counter <= last_valid_counters_[sender_id]) {
     return false;
   }
 
@@ -238,8 +303,12 @@ bool LoraVerifier::verify_and_parse(const uint8_t pkt[kLoraPacketSize], LoraPack
     return false;
   }
 
-  last_valid_counter_ = counter;
-  out.cmd = static_cast<LoraCmd>(pkt[0]);
+  last_valid_counters_[sender_id] = counter;
+  if (storage_ != nullptr) {
+    storage_->save_counter(sender_id, counter);
+  }
+  out.cmd = static_cast<LoraCmd>(cmd_raw);
+  out.sender_id = sender_id;
   out.group_id = group_id;
   out.counter = counter;
   return true;

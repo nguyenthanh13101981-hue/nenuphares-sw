@@ -11,9 +11,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Validate YAML configs
+      - name: Validate YAML configs & CdCT spec
         run: |
-          python3 -c "import yaml, glob; files = sorted(glob.glob('config/**/*.yaml', recursive=True)); assert files; [yaml.safe_load(open(f)) for f in files]; print('Validated YAML files:', files)"
+          python3 -c "import yaml, glob; files = sorted(glob.glob('config/**/*.yaml', recursive=True)) + ['docs/cdct_spec_a8_a10.yaml']; assert files; [yaml.safe_load(open(f)) for f in files]; print('Validated YAML files:', files)"
+      - name: Run L2 pure-Python host logic & property tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-pytest python3-yaml
+          PYTHONPATH=l2_ros2_ws/src/nenuphar_nodes pytest -v l2_ros2_ws/src/nenuphar_nodes/test/test_core_logic_host.py
 
   l0-c8-pico2-gtest:
     runs-on: ubuntu-24.04

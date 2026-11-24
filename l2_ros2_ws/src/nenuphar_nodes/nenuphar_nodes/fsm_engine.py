@@ -1,117 +1,85 @@
-"""Complete S0-S12 Mission FSM engine with transition table, hard priority, and 3-tier faults.
+"""Complete CdCT Final A.8 S0-S12 Mission FSM engine loaded from docs/cdct_spec_a8_a10.yaml.
 
-Implements CdCT Final 2.0 (SPEC_PHU_LUC_A.md §5, PROJECT_RULES.md §3 rule 5, A.8/A.13):
-  - All 13 states S0..S12 (never collapsed to S0..S10).
-  - Hard priority order: S9 > S8 > S12 > S7 > S11 > S10 > S1.
-  - 3 fault tiers:
-      Tier 1: self-recovering minor fault (e.g. BMS BLE loss, energy WARN).
-      Tier 2: moderate fault -> DDKC corridor emergency berth (S12).
-      Tier 3: critical fault -> immediate safe hold/stop (S8/S9) + HOLD-ALL <= 2 s.
-  - Strict transition table validation (zero out-of-table transitions).
+Enforces exact CdCT Final A.8 state meanings, transitions, hard priority order, and 3-tier faults:
+  - S0: INIT_PRECHECK (USB 3 & liveness gate)
+  - S1: MISSION_PATROL
+  - S2: BRIDGE_APPROACH (>= 10 m before bridge, <= 2 km/h)
+  - S3: BRIDGE_CENTERING (+/- 25 cm, timeout 30 s -> S7)
+  - S4: BRIDGE_CLEARANCE_MEASURE (Config B 800P, >= raft_height + 0.10 m, DB +/- 0.05 m)
+  - S5: BRIDGE_TRANSIT (bridge_permit + BRIDGE_ZONE + VIO EKF source 2)
+  - S6: BRIDGE_EXIT (RTK reacquire; timeout > 30 s -> S12 / S7 + HOLD-ALL)
+  - S7: HOLD_WAIT (Wait / Hold: S3 timeout, S4 unpermitted, RTK/cam loss, outside Z2, HOLD-ALL, docked)
+  - S8: BRIDGE_EMERGENCY_EXIT (Emergency exit from under bridge with propulsion intact)
+  - S9: EMERGENCY_STOP (Total propulsion loss / E-stop / critical fault outside bridge + HOLD-ALL <= 2 s)
+  - S10: RTB_RETURN_TO_BASE (Return to base; docked -> S7)
+  - S11: OBSTACLE_AVOID (g >= 1.35 m, within Z2 +/- 1.25 m, <= 10 s; preempts S10)
+  - S12: DDKC_EMERGENCY_BERTH (Tier 2 DDKC: Z1 excursion, SoC <= 10% w/ propulsion, S6 RTK timeout, S11 fail)
 """
 
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
-from nenuphar_msgs.msg import EnergyStatus, MissionState
+from nenuphar_nodes.config_loader import load_cdct_spec
+from nenuphar_nodes.energy_logic import LEVEL_OK, LEVEL_RTB, LEVEL_STOP, LEVEL_WARN
 
-# State aliases for readability.
-S0 = MissionState.STATE_S0    # INIT_PRECHECK (USB 3 & health gate)
-S1 = MissionState.STATE_S1    # MISSION_PATROL
-S2 = MissionState.STATE_S2    # OBSTACLE_AVOID (Config A 400P <= 200 ms)
-S3 = MissionState.STATE_S3    # BRIDGE_APPROACH (<= 2 km/h, S3 timeout)
-S4 = MissionState.STATE_S4    # BRIDGE_CLEARANCE_MEASURE (Config B 800P, +/- 5 cm)
-S5 = MissionState.STATE_S5    # BRIDGE_TRANSIT (requires bridge_permit, VIO EKF)
-S6 = MissionState.STATE_S6    # BRIDGE_EXIT_REACQUIRE (GNSS reacquire, S6 timeout)
-S7 = MissionState.STATE_S7    # FORMATION_HOLD_RESYNC
-S8 = MissionState.STATE_S8    # SAFE_HOLD_TIER3 (HOLD-ALL <= 2 s)
-S9 = MissionState.STATE_S9    # EMERGENCY_STOP (HOLD-ALL <= 2 s)
-S10 = MissionState.STATE_S10  # RTB_RETURN_TO_BASE
-S11 = MissionState.STATE_S11  # DOCKING_STANDBY
-S12 = MissionState.STATE_S12  # DDKC_EMERGENCY_BERTH (Tier 2)
+# Exact CdCT Final A.8 state aliases.
+S0 = 0    # INIT_PRECHECK
+S1 = 1    # MISSION_PATROL
+S2 = 2    # BRIDGE_APPROACH
+S3 = 3    # BRIDGE_CENTERING
+S4 = 4    # BRIDGE_CLEARANCE_MEASURE
+S5 = 5    # BRIDGE_TRANSIT
+S6 = 6    # BRIDGE_EXIT
+S7 = 7    # HOLD_WAIT
+S8 = 8    # BRIDGE_EMERGENCY_EXIT
+S9 = 9    # EMERGENCY_STOP
+S10 = 10  # RTB_RETURN_TO_BASE
+S11 = 11  # OBSTACLE_AVOID
+S12 = 12  # DDKC_EMERGENCY_BERTH
 
 ALL_STATES: Tuple[int, ...] = (
     S0, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12
 )
 
-# Hard priority order from PROJECT_RULES.md §3 rule 5.
-PRIORITY_ORDER: Tuple[int, ...] = (S9, S8, S12, S7, S11, S10, S1)
+_SPEC = load_cdct_spec()
+_A8 = _SPEC['a8_fsm']
 
-# Canonical A.8 valid transition table (src, dst).
-# Every single edge here must be triggered >= 1 time in SITL per A.13.
-ALLOWED_TRANSITIONS: FrozenSet[Tuple[int, int]] = frozenset({
-    # Nominal mission & obstacle avoidance
-    (S0, S1),
-    (S1, S2),
-    (S2, S1),
-    # Bridge sequence S1 -> S3 -> S4 -> S5 -> S6 -> S1
-    (S1, S3),
-    (S3, S4),
-    (S4, S5),
-    (S5, S6),
-    (S6, S1),
-    # Formation hold/resync S1 <-> S7
-    (S1, S7),
-    (S7, S1),
-    # RTB & Docking S1 -> S10 -> S11 -> S0
-    (S1, S10),
-    (S10, S11),
-    (S11, S0),
-    # Tier 2 moderate faults -> DDKC (S12) & recovery to S10/S0
-    (S1, S12),
-    (S2, S12),
-    (S3, S12),
-    (S4, S12),
-    (S6, S12),
-    (S12, S10),
-    (S12, S0),
-    # Tier 3 critical faults -> Safe Hold (S8) & Emergency Stop (S9)
-    (S0, S8),
-    (S1, S8),
-    (S5, S8),
-    (S7, S8),
-    (S10, S8),
-    (S12, S8),
-    (S8, S12),
-    (S8, S0),
-    # Highest-priority Emergency Stop (S9) from operational/hold states & manual reset to S0
-    (S0, S9),
-    (S1, S9),
-    (S2, S9),
-    (S3, S9),
-    (S4, S9),
-    (S5, S9),
-    (S6, S9),
-    (S7, S9),
-    (S8, S9),
-    (S10, S9),
-    (S11, S9),
-    (S12, S9),
-    (S9, S0),
-})
+PRIORITY_ORDER: Tuple[int, ...] = tuple(int(s) for s in _A8['priority_order'])
+ALLOWED_TRANSITIONS: FrozenSet[Tuple[int, int]] = frozenset(
+    (int(edge[0]), int(edge[1])) for edge in _A8['allowed_transitions']
+)
+STATE_NAMES: Dict[int, str] = {
+    int(k): str(v['name']) for k, v in _A8['states'].items()
+}
 
 
 @dataclass
 class FsmInputs:
-    """Consolidated sensor, health, energy, bridge, and fault inputs for one FSM step."""
+    """Consolidated sensor, health, energy, bridge, obstacle, and fault inputs for one FSM step."""
 
     now_s: float = 0.0
+    fault_detected_s: Optional[float] = None
     usb3_camera_ok: bool = True
     all_nodes_alive: bool = True
     start_mission: bool = False
     obstacle_detected: bool = False
+    obstacle_gap_m: float = 2.0
     bridge_detected: bool = False
-    at_bridge_measure_point: bool = False
+    at_bridge_centering: bool = False
+    bridge_centered: bool = False
     bridge_clearance_ready: bool = False
     bridge_pass_permitted: bool = False
+    bridge_id: str = ''
     bridge_exited: bool = False
     gnss_reacquired: bool = False
-    formation_hold_req: bool = False
+    hold_requested: bool = False
     rtb_requested: bool = False
     docked_at_base: bool = False
-    corridor_deviation_alert: bool = False
-    energy_level: int = EnergyStatus.LEVEL_OK
+    corridor_ddkc_alert: bool = False
+    outside_z2_hold: bool = False
+    energy_level: int = LEVEL_OK
     bms_ble_connected: bool = True
+    propulsion_available: bool = True
     tier3_critical_fault: bool = False
     emergency_stop_cmd: bool = False
     reset_to_s0: bool = False
@@ -119,11 +87,14 @@ class FsmInputs:
 
 @dataclass
 class FsmConfig:
-    """Tunable timeouts tracked under TBD-20."""
+    """Timeouts sourced from docs/cdct_spec_a8_a10.yaml."""
 
-    s3_timeout_s: float = 30.0
-    s6_timeout_s: float = 20.0
-    hold_all_deadline_s: float = 2.0
+    s3_centering_timeout_s: float = float(_A8['timeouts']['s3_centering_timeout_s'])
+    s6_rtk_timeout_s: float = float(_A8['timeouts']['s6_rtk_timeout_s'])
+    s11_avoid_max_s: float = float(_A8['timeouts']['s11_avoid_max_s'])
+    hold_all_deadline_s: float = float(_A8['timeouts']['hold_all_deadline_s'])
+    bridge_permit_ttl_s: float = float(_A8['timeouts']['bridge_permit_ttl_s'])
+    obstacle_min_gap_m: float = float(_SPEC['tr_4_16_corridor']['obstacle_min_gap_m'])
 
 
 @dataclass
@@ -146,9 +117,9 @@ def resolve_fsm_state(
     usb3_camera_ok: bool,
     requests: Tuple[int, ...] = (),
 ) -> int:
-    """Resolve state honoring S0 USB-3 gate and hard priority S9>S8>S12>S7>S11>S10>S1."""
+    """Resolve target state honoring S0 USB-3 gate and hard priority S9>S8>S12>S7>S11>S10>S1."""
     if not usb3_camera_ok and current_state == S0:
-        for state in (S9, S8, S12):
+        for state in (S9, S8, S12, S7):
             if state in requests:
                 return state
         return S0
@@ -156,11 +127,13 @@ def resolve_fsm_state(
     for state in PRIORITY_ORDER:
         if state in requests:
             return state
+    for state in requests:
+        return state
     return current_state
 
 
 class MissionFsmEngine:
-    """Deterministic S0-S12 mission FSM enforcing A.8 transition table and A.13 tracking."""
+    """Deterministic S0-S12 mission FSM enforcing CdCT A.8 table and priority."""
 
     def __init__(self, cfg: Optional[FsmConfig] = None) -> None:
         self.cfg = cfg or FsmConfig()
@@ -168,10 +141,13 @@ class MissionFsmEngine:
         self.state_enter_s: float = 0.0
         self.fault_tier: int = 0
         self.bridge_permit: bool = False
+        self.bridge_permit_granted_s: Optional[float] = None
+        self.active_bridge_id: str = ''
         self.hold_all_req: bool = False
         self.hold_all_latency_s: float = 0.0
         self.ekf_source_set: int = 1
 
+        self._fault_onset_s: Optional[float] = None
         self.observed_transitions: Set[Tuple[int, int]] = set()
         self.transition_counts: Dict[Tuple[int, int], int] = {}
         self.transition_history: List[Tuple[int, int, str]] = []
@@ -191,124 +167,213 @@ class MissionFsmEngine:
         self.state_enter_s = now_s
         return True
 
-    def step(self, inp: FsmInputs) -> FsmOutput:
-        """Advance FSM by one cycle and return control/safety flags."""
-        elapsed_in_state = max(0.0, inp.now_s - self.state_enter_s)
+    def _collect_requests(self, inp: FsmInputs, elapsed: float) -> Tuple[List[int], str]:
+        reqs: List[int] = []
+        reason = 'nominal'
 
-        # Evaluate 3-tier fault classification.
-        tier3_stop = inp.emergency_stop_cmd or (inp.energy_level == EnergyStatus.LEVEL_STOP)
-        tier3_hold = inp.tier3_critical_fault or (not inp.all_nodes_alive and self.state != S0)
-        tier2_ddkc = (
-            inp.corridor_deviation_alert
-            or (self.state == S3 and elapsed_in_state >= self.cfg.s3_timeout_s)
-            or (self.state == S6 and elapsed_in_state >= self.cfg.s6_timeout_s)
-            or (
-                self.state == S4
-                and inp.bridge_clearance_ready
-                and not inp.bridge_pass_permitted
-            )
-        )
-        tier1_minor = (not inp.bms_ble_connected) or (
-            inp.energy_level == EnergyStatus.LEVEL_WARN
-        )
-
-        # Priority 1: S9 Emergency Stop (highest priority across all states).
+        # 1. Tier 3: Total propulsion loss / E-stop -> S9; critical fault under bridge (S5) w/ propulsion -> S8;
+        # critical fault in any other state -> S9 (never ignored in any state!).
+        tier3_stop = inp.emergency_stop_cmd or (not inp.propulsion_available)
+        tier3_crit = inp.tier3_critical_fault or (not inp.all_nodes_alive and self.state != S0)
         if tier3_stop:
-            self.fault_tier = 3
-            self.bridge_permit = False
-            self.hold_all_req = True
-            self.hold_all_latency_s = 0.0
-            self._transition_to(S9, inp.now_s, 'tier3_emergency_stop')
-        # Priority 2: S9 manual reset to S0 once fault cleared.
-        elif self.state == S9:
+            reqs.append(S9)
+            reason = 'tier3_emergency_stop'
+        elif tier3_crit:
+            if self.state == S5 and inp.propulsion_available:
+                reqs.append(S8)
+                reason = 'tier3_bridge_emergency_exit'
+            elif self.state != S8:
+                reqs.append(S9)
+                reason = 'tier3_critical_stop'
+
+        # 2. Tier 2 -> S12 DDKC (includes SoC <= 10% while propulsion intact per CdCT S1).
+        s6_rtk_timeout = self.state == S6 and elapsed >= self.cfg.s6_rtk_timeout_s
+        s11_avoid_fail = self.state == S11 and elapsed >= self.cfg.s11_avoid_max_s
+        soc_ddkc = inp.energy_level == LEVEL_STOP and inp.propulsion_available
+        if inp.corridor_ddkc_alert or s6_rtk_timeout or s11_avoid_fail or soc_ddkc:
+            if self.state in (S1, S2, S3, S4, S6, S7, S8, S10, S11):
+                reqs.append(S12)
+                reason = 'tier2_ddkc'
+
+        # 3. Hold / Wait -> S7.
+        s3_timeout = self.state == S3 and elapsed >= self.cfg.s3_centering_timeout_s
+        s4_denied = (
+            self.state == S4
+            and inp.bridge_clearance_ready
+            and not inp.bridge_pass_permitted
+        )
+        s10_docked = self.state == S10 and inp.docked_at_base
+        if (
+            inp.hold_requested
+            or inp.outside_z2_hold
+            or s3_timeout
+            or s4_denied
+            or s10_docked
+        ):
+            if self.state in (S1, S2, S3, S4, S6, S8, S10, S11, S12):
+                reqs.append(S7)
+                reason = 'hold_wait'
+
+        # 4. Obstacle Avoidance -> S11 (g >= 1.35 m, preempts S10 & S1 per PRIORITY_ORDER).
+        if (
+            inp.obstacle_detected
+            and inp.obstacle_gap_m >= self.cfg.obstacle_min_gap_m
+            and self.state in (S1, S10)
+        ):
+            reqs.append(S11)
+            reason = 'obstacle_avoid_s11'
+        elif self.state == S11 and not inp.obstacle_detected:
+            if inp.rtb_requested or inp.energy_level == LEVEL_RTB:
+                reqs.append(S10)
+                reason = 'obstacle_cleared_rtb'
+            else:
+                reqs.append(S1)
+                reason = 'obstacle_cleared'
+
+        # 5. RTB -> S10.
+        if (inp.rtb_requested or inp.energy_level == LEVEL_RTB) and self.state in (
+            S1,
+            S2,
+            S7,
+            S12,
+        ):
+            reqs.append(S10)
+            reason = 'rtb_requested'
+
+        # 6. Nominal mission, bridge sequence, and resets.
+        if self.state == S0:
+            if inp.start_mission and inp.usb3_camera_ok and inp.all_nodes_alive:
+                reqs.append(S1)
+                reason = 'precheck_ok_start'
+        elif self.state == S1:
+            if inp.bridge_detected:
+                reqs.append(S2)
+                reason = 'bridge_approach'
+        elif self.state == S2:
+            if inp.at_bridge_centering:
+                reqs.append(S3)
+                reason = 'bridge_centering'
+        elif self.state == S3:
+            if inp.bridge_centered:
+                reqs.append(S4)
+                reason = 'enter_bridge_clearance'
+        elif self.state == S4:
+            if inp.bridge_clearance_ready and inp.bridge_pass_permitted:
+                reqs.append(S5)
+                reason = 'bridge_permit_granted'
+        elif self.state == S5:
+            if inp.bridge_exited:
+                reqs.append(S6)
+                reason = 'bridge_exited'
+        elif self.state == S6:
+            if inp.gnss_reacquired:
+                reqs.append(S1)
+                reason = 'gnss_reacquired'
+        elif self.state == S7:
             if inp.reset_to_s0:
-                self.fault_tier = 0
-                self.hold_all_req = False
-                self._transition_to(S0, inp.now_s, 'reset_from_s9')
-        # Priority 3: S8 Critical Safe Hold (Tier 3, HOLD-ALL <= 2 s).
-        elif tier3_hold and self.state in (S0, S1, S5, S7, S10, S12):
-            self.fault_tier = 3
-            self.bridge_permit = False
-            self.hold_all_req = True
-            self.hold_all_latency_s = 0.0
-            self._transition_to(S8, inp.now_s, 'tier3_safe_hold')
+                reqs.append(S0)
+                reason = 'reset_from_s7'
+            elif (
+                inp.bridge_detected
+                and inp.at_bridge_centering
+                and inp.bridge_centered
+                and (not inp.bridge_clearance_ready or inp.bridge_pass_permitted)
+            ):
+                reqs.append(S4)
+                reason = 'retry_bridge_clearance'
+            elif (
+                not inp.hold_requested
+                and not inp.outside_z2_hold
+                and not inp.docked_at_base
+                and not (inp.bridge_clearance_ready and not inp.bridge_pass_permitted)
+            ):
+                reqs.append(S1)
+                reason = 'resume_from_hold'
         elif self.state == S8:
             if inp.reset_to_s0:
-                self.fault_tier = 0
-                self.hold_all_req = False
-                self._transition_to(S0, inp.now_s, 'reset_from_s8')
-            elif not tier3_hold and inp.corridor_deviation_alert:
-                self.fault_tier = 2
-                self.hold_all_req = False
-                self._transition_to(S12, inp.now_s, 'deescalate_s8_to_s12')
-        # Priority 4: S12 DDKC (Tier 2 moderate fault).
-        elif tier2_ddkc and self.state in (S1, S2, S3, S4, S6):
-            self.fault_tier = 2
-            self.bridge_permit = False
-            self.hold_all_req = False
-            self._transition_to(S12, inp.now_s, 'tier2_ddkc')
-        elif self.state == S12:
+                reqs.append(S0)
+                reason = 'reset_from_s8'
+            elif inp.bridge_exited:
+                reqs.append(S7)
+                reason = 'bridge_emergency_exited'
+        elif self.state in (S9, S12):
             if inp.reset_to_s0:
-                self.fault_tier = 0
-                self._transition_to(S0, inp.now_s, 'reset_from_s12')
-            elif inp.rtb_requested or inp.energy_level == EnergyStatus.LEVEL_RTB:
-                self.fault_tier = 1 if tier1_minor else 0
-                self._transition_to(S10, inp.now_s, 's12_to_rtb')
+                reqs.append(S0)
+                reason = 'reset_to_s0'
+
+        return reqs, reason
+
+    def step(self, inp: FsmInputs) -> FsmOutput:
+        """Advance FSM by one cycle using centralized priority resolution."""
+        elapsed = max(0.0, inp.now_s - self.state_enter_s)
+        tier1_minor = (not inp.bms_ble_connected) or (inp.energy_level == LEVEL_WARN)
+
+        # Track fault onset for honest HOLD-ALL latency measurement (B8).
+        has_hold_all_fault = (
+            inp.emergency_stop_cmd
+            or (not inp.propulsion_available)
+            or inp.tier3_critical_fault
+            or (not inp.all_nodes_alive and self.state != S0)
+        )
+        if has_hold_all_fault:
+            if inp.fault_detected_s is not None:
+                self._fault_onset_s = inp.fault_detected_s
+            elif self._fault_onset_s is None:
+                self._fault_onset_s = inp.now_s
         else:
-            # Nominal & lower-priority transitions (S7 > S11 > S10 > S1).
+            self._fault_onset_s = None
+
+        reqs, reason = self._collect_requests(inp, elapsed)
+        target = resolve_fsm_state(
+            self.state, inp.usb3_camera_ok, tuple(reqs)
+        )
+
+        # Prevent S9->S0 reset while an emergency stop / propulsion loss condition is still asserted.
+        if self.state == S9 and target == S0 and (inp.emergency_stop_cmd or not inp.propulsion_available):
+            target = S9
+
+        prev_state = self.state
+        if target != self.state:
+            self._transition_to(target, inp.now_s, reason)
+
+        # Manage bridge permit & clear stale clearance whenever exiting S4/S5 (B1).
+        if self.state == S5 and prev_state == S4:
+            self.bridge_permit = True
+            self.bridge_permit_granted_s = inp.now_s
+            self.active_bridge_id = inp.bridge_id
+        elif self.state != S5:
+            self.bridge_permit = False
+            self.bridge_permit_granted_s = None
+
+        if self.state in (S8, S9):
+            self.fault_tier = 3
+            self.hold_all_req = True
+            self.hold_all_latency_s = (
+                max(0.0, inp.now_s - self._fault_onset_s)
+                if self._fault_onset_s is not None
+                else 0.0
+            )
+        elif self.state == S12:
+            self.fault_tier = 2
             self.hold_all_req = False
+            self.hold_all_latency_s = 0.0
+        elif self.state == S7 and (inp.hold_requested or inp.outside_z2_hold):
+            self.fault_tier = 1
+            self.hold_all_req = False
+            self.hold_all_latency_s = 0.0
+        else:
             self.fault_tier = 1 if tier1_minor else 0
+            self.hold_all_req = False
+            self.hold_all_latency_s = 0.0
 
-            if self.state == S0:
-                # Reject leaving S0 if camera is not on USB 3 or nodes not alive.
-                if inp.start_mission and inp.usb3_camera_ok and inp.all_nodes_alive:
-                    self._transition_to(S1, inp.now_s, 'precheck_ok_start')
-            elif self.state == S1:
-                if inp.formation_hold_req:
-                    self._transition_to(S7, inp.now_s, 'formation_hold')
-                elif inp.rtb_requested or inp.energy_level == EnergyStatus.LEVEL_RTB:
-                    self._transition_to(S10, inp.now_s, 'energy_or_cmd_rtb')
-                elif inp.obstacle_detected:
-                    self._transition_to(S2, inp.now_s, 'obstacle_avoid')
-                elif inp.bridge_detected:
-                    self._transition_to(S3, inp.now_s, 'bridge_approach')
-            elif self.state == S2:
-                if not inp.obstacle_detected:
-                    self._transition_to(S1, inp.now_s, 'obstacle_cleared')
-            elif self.state == S3:
-                if inp.at_bridge_measure_point:
-                    self._transition_to(S4, inp.now_s, 'enter_bridge_clearance')
-            elif self.state == S4:
-                if inp.bridge_clearance_ready and inp.bridge_pass_permitted:
-                    self.bridge_permit = True
-                    self._transition_to(S5, inp.now_s, 'bridge_permit_granted')
-            elif self.state == S5:
-                if inp.bridge_exited:
-                    self.bridge_permit = False
-                    self._transition_to(S6, inp.now_s, 'bridge_exited')
-            elif self.state == S6:
-                if inp.gnss_reacquired:
-                    self._transition_to(S1, inp.now_s, 'gnss_reacquired')
-            elif self.state == S7:
-                if not inp.formation_hold_req:
-                    self._transition_to(S1, inp.now_s, 'formation_resumed')
-            elif self.state == S10:
-                if inp.docked_at_base:
-                    self._transition_to(S11, inp.now_s, 'arrived_at_base')
-            elif self.state == S11:
-                if inp.reset_to_s0:
-                    self._transition_to(S0, inp.now_s, 'docking_complete_standby')
+        bridge_zone_active = self.state in (S4, S5, S8)
+        self.ekf_source_set = 2 if self.state in (S5, S8) else 1
 
-        # Compute EKF source, bridge zone, and speed limits per Final 2.0.
-        bridge_zone_active = self.state in (S4, S5)
-        self.ekf_source_set = 2 if self.state == S5 else 1
-
-        if self.state in (S0, S7, S8, S9, S11, S12):
+        if self.state in (S0, S7, S9, S12):
             max_speed_mps = 0.0
             hold_position = True
-        elif self.state in (S3, S4):
-            # SPEC A.11 / A.4: Config B bridge measurement <= 2 km/h (0.555 m/s).
-            max_speed_mps = 2.0 / 3.6
+        elif self.state in (S2, S3, S4):
+            max_speed_mps = 2.0 / 3.6  # <= 2 km/h (0.556 m/s)
             hold_position = False
         else:
             max_speed_mps = 1.5

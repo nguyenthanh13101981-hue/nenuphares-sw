@@ -12,7 +12,7 @@ from pymavlink import mavutil
 
 os.environ['MAVLINK20'] = '1'
 
-REPO_ROOT = Path('/home/nenuphar/nenuphares-sw')
+REPO_ROOT = Path(__file__).resolve().parents[2]
 ARDUROVER_BIN = Path.home() / 'sim/ardupilot/build/sitl/bin/ardurover'
 DEFAULT_ROVER_PARM = Path.home() / 'sim/ardupilot/Tools/autotest/default_params/rover.parm'
 A7_PARM = REPO_ROOT / 'l1_ardupilot/params/sitl_boat_a7.parm'
@@ -145,10 +145,17 @@ def test_stage4_sitl_boat_lua_failsafes_signing_and_ekf() -> None:
         master.setup_signing(SIGNING_KEY, sign_outgoing=True, link_id=0)
         time.sleep(0.5)
 
-        # Verify A.7 baseline params.
+        # Verify A.7 baseline params & active failsafes/geofence.
         assert _get_param(master, 'FRAME_CLASS') == 2.0
         assert _get_param(master, 'SCHED_LOOP_RATE') == 50.0
         assert _get_param(master, 'FS_TIMEOUT') >= 3.0
+        assert _get_param(master, 'FS_ACTION') == 2.0
+        assert _get_param(master, 'FS_GCS_ENABLE') == 1.0
+        assert _get_param(master, 'BATT_MONITOR') == 4.0
+        assert _get_param(master, 'BATT_FS_LOW_ACT') == 1.0
+        assert _get_param(master, 'BATT_FS_CRT_ACT') == 2.0
+        assert _get_param(master, 'FENCE_ENABLE') == 1.0
+        assert _get_param(master, 'FENCE_ACTION') == 2.0
         assert abs(_get_param(master, 'SIM_TIDE_SPEED') - 0.10) < 1e-3
         assert abs(_get_param(master, 'SIM_WIND_SPD') - 0.10) < 1e-3
 
@@ -183,12 +190,18 @@ def test_stage4_sitl_boat_lua_failsafes_signing_and_ekf() -> None:
         master.set_mode(15)  # GUIDED
         _wait_mode(master, 15)
 
-        # Enter BRIDGE_ZONE without BRIDGE_PERMIT -> must force HOLD (4).
+        # Enter BRIDGE_ZONE without BRIDGE_PERMIT -> must force HOLD (4) when in GUIDED.
         _set_param(master, 'SCR_USER4', 0.0)
         _set_param(master, 'SCR_USER5', 1.0)
         _send_l2_heartbeat(master)
         _wait_mode(master, 4)
         assert _wait_named_float(master, 'BRG_LOCK', lambda v: v == 1.0) == 1.0
+
+        # Human operator override (MANUAL = 0) must NEVER be overridden by Lua bridge lock.
+        master.set_mode(0)
+        _wait_mode(master, 0)
+        time.sleep(0.4)
+        _wait_mode(master, 0)
 
         # Grant BRIDGE_PERMIT -> FS_GCS_TIMEOUT relaxes to 30 s, allow GUIDED.
         _set_param(master, 'SCR_USER4', 1.0)

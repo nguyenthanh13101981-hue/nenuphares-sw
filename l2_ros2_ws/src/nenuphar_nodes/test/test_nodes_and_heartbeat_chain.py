@@ -42,7 +42,12 @@ def test_11_nodes_qos_and_heartbeat_chain() -> None:
         energy = EnergyNode()
         bridge = MavlinkBridgeNode()
         blackbox = BlackboxNode()
-        sysmon = SystemMonitorNode()
+        sysmon = SystemMonitorNode(
+            parameter_overrides=[
+                Parameter('usb3_check_mode', value='param'),
+                Parameter('usb3_camera_ok', value=True),
+            ]
+        )
 
         nodes = [
             cam,
@@ -103,6 +108,7 @@ def test_11_nodes_qos_and_heartbeat_chain() -> None:
         assert bridge.last_health.usb3_camera_ok is True
         assert bridge.last_health.all_nodes_alive is True
         assert bridge.last_health.failed_node_mask == 0
+        assert bridge.tx_c8_keepalive_count >= 1
     finally:
         for n in nodes:
             n.destroy_node()
@@ -120,7 +126,9 @@ def test_mock_sensor_pipeline_flows_through_vio_and_perception() -> None:
         cam = CameraDriverNode(
             parameter_overrides=[Parameter('enable_stub_stream', value=True)]
         )
-        vio = VioNode()
+        vio = VioNode(
+            parameter_overrides=[Parameter('enable_stub_odom', value=True)]
+        )
         geom = PerceptionGeomNode()
         observer = Node('sensor_pipeline_observer')
 
@@ -145,7 +153,7 @@ def test_mock_sensor_pipeline_flows_through_vio_and_perception() -> None:
             if odom_msgs and obstacle_msgs:
                 break
 
-        assert odom_msgs, 'Expected Odometry on /vio/odometry from stub stream'
+        assert odom_msgs, 'Expected Odometry on /vio/odometry when stub odom enabled'
         assert obstacle_msgs, 'Expected ObstacleArray on /perception/obstacles'
         assert obstacle_msgs[-1].depth_config == ObstacleArray.CONFIG_A_400P
     finally:

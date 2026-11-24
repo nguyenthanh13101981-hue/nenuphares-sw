@@ -50,12 +50,14 @@ Tài liệu tóm lược toàn bộ yêu cầu kỹ thuật của **Phụ lục 
 
 ## 5. Máy trạng thái nhiệm vụ S0–S12 & phân tầng lỗi (Mục A.8)
 
-- **Tập trạng thái:** `S0` đến `S12` (khởi tạo/kiểm tra trước chạy -> tuần tra/di chuyển -> tiếp cận/đo tĩnh không cầu `S4` -> qua cầu -> lách vật cản -> quay về bến `S10` -> giữ vị trí / ĐDKC `S12` -> dừng an toàn `S8`/`S9`).
+- **Nguồn chuẩn máy đọc:** Toàn bộ định nghĩa trạng thái, 52 cạnh chuyển hợp lệ và ngưỡng được đóng băng tại [cdct_spec_a8_a10.yaml](cdct_spec_a8_a10.yaml):
+  - `S0` Khởi tạo/USB 3 -> `S1` Hành trình Z1 -> `S2` Tiếp cận cầu (`>= 10 m`, `<= 2 km/h`) -> `S3` Canh giữa (`±25 cm`, `<= 30 s`) -> `S4` Đo tĩnh không (`>= chiều cao bè + 10 cm`, đối chiếu CSDL `±5 cm`) -> `S5` Qua cầu (EKF nguồn 2 VIO) -> `S6` Thoát cầu & khóa lại RTK (`<= 30 s`).
+  - `S7` Chờ/Hold (chưa đạt `S4`, quá hạn `S3`, mất RTK/camera, ngoài Z2 `±1,25 m`, `HOLD-ALL`, tới bến từ `S10`); `S8` Rời gầm cầu khẩn khi gặp sự cố trong `S5` nhưng còn lực đẩy; `S9` Dừng khẩn cấp / mất toàn bộ lực đẩy; `S10` RTB về bến; `S11` Lách vật cản (`g >= 1,35 m`, trong Z2, `<= 10 s`, ưu tiên hơn `S10`); `S12` ĐDKC (lỗi bậc 2, `SoC <= 10%` khi còn lực đẩy).
 - **Thứ tự ưu tiên cứng:** `S9 > S8 > S12 > S7 > S11 > S10 > S1`.
 - **Phân tầng xử lý lỗi:**
-  - **Tầng 1 (Lỗi nhẹ):** Tự phục hồi cục bộ (ví dụ mất Bluetooth BMS chỉ ghi cảnh báo).
+  - **Tầng 1 (Lỗi nhẹ):** Tự phục hồi cục bộ (mất BLE BMS chỉ ghi cảnh báo; `WARN` pin vào ở `<= 28%`, thoát ở `>= 30%`).
   - **Tầng 2 (Lỗi trung bình):** Chuyển về điểm dừng khẩn cấp hành lang (**ĐDKC — `S12`**).
-  - **Tầng 3 (Lỗi nghiêm trọng):** Lập tức giữ vị trí / dừng an toàn (`S8`/`S9`) và phát lệnh **HOLD-ALL <= 2 s** cho đội hình (V2).
+  - **Tầng 3 (Lỗi nghiêm trọng):** Trong cầu còn lực đẩy -> **`S8`**; mất toàn bộ lực đẩy / ngoài cầu -> **`S9`**, phát lệnh **HOLD-ALL <= 2 s**.
 
 ## 6. Quản lý năng lượng (Mục A.9 — chạy 1 Hz trên `energy`)
 
@@ -68,15 +70,17 @@ Tài liệu tóm lược toàn bộ yêu cầu kỹ thuật của **Phụ lục 
 | Ngưỡng quay về (`RTB — S10`) | ~21% (145,7 Wh) | `mission_fsm` kích hoạt `S10` quay về bến |
 | Ngưỡng dừng (`STOP — BATT_CRT`) | <= 10% (hoặc 11,5–12,0 V trên L1) | Tầng L1 cưỡng bức dừng an toàn |
 
-## 7. Bo an toàn C8 — Raspberry Pi Pico 2 (Mục A.10)
+## 7. Bo an toàn C8 — Raspberry Pi Pico 2 (Mục A.10 & TR-8.3)
 
-- **Chu kỳ & phần cứng:** Vòng lặp chính >= 100 Hz, watchdog phần cứng ngoài 100 ms, đọc MPU-6050 >= 50 Hz, đọc 4 load cell 50 kg (HX711, ngưỡng quá tải **10 kg**), thu LoRa SX1262 qua SPI.
+- **Chu kỳ & phần cứng:** Vòng lặp chính `>= 100 Hz`, watchdog phần cứng ngoài `100 ms` (chỉ đá khi đọc cảm biến khỏe mạnh), đọc MPU-6050 `>= 50 Hz`, đọc 4 load cell 50 kg (HX711 có trừ bì), thu LoRa SX1262 qua SPI. Cảm biến `NaN`/quá hạn tự động đưa về trạng thái an toàn.
+- **Ngưỡng cắt TR-8.3 (bảng C4):** Nghiêng động `> 15°` trong `< 1 s`, nghiêng/chúi tĩnh `> 3°` kéo dài `> 1 s`, thay đổi tải giá đỡ `>= 10 kg` trong `< 1 s`.
 - **4 trạng thái cốt lõi:**
-  - `SAFE_OFF`: Khởi động an toàn, ngắt rơ-le động lực.
-  - `ARMED`: Cho phép cấp nguồn động lực khi đủ điều kiện an toàn và có keepalive hợp lệ.
-  - `STOPPED`: **Chốt cứng (latched)** khi nhấn nút E-stop, nhận gói LoRa `STOP`, hoặc vượt ngưỡng nghiêng/tải ngoài vùng cầu; chỉ mở khóa lại bằng thao tác thủ công tại bè (EN ISO 13850).
-  - `HOLD_REQ`: Kích hoạt khi mất **3 nhịp keepalive liên tiếp (= 3 s)** hoặc nhận gói LoRa `HOLD`; gửi yêu cầu giữ vị trí sang L1/L2 mà không cắt cứng nguồn.
-- **Cờ `BRIDGE_ZONE`:** Làm mới chu kỳ <= 60 s; khi đang hoạt động, chỉ tạm ức chế cắt tự động do nghiêng/tải (nút E-stop tay và gói LoRa `STOP` luôn có hiệu lực tuyệt đối).
+  - `SAFE_OFF`: Khởi động an toàn, ngắt rơ-le động lực. **C4 tuyệt đối không có quyền đóng contactor**; để sang `ARMED` phải có đủ sườn lên nút khởi động tại bè, E-stop đã nhả, keepalive hợp lệ và gói LoRa `RUN` còn hạn.
+  - `ARMED`: Cho phép cấp nguồn động lực khi đủ điều kiện an toàn.
+  - `STOPPED`: **Chốt cứng (latched)** khi nhấn E-stop, nhận LoRa `STOP`, STOP từ 4G/Watchdog, lỗi cảm biến, hoặc vượt ngưỡng TR-8.3 ngoài vùng cầu; chỉ mở khóa về `SAFE_OFF` bằng sườn lên nút reset thủ công tại bè (EN ISO 13850), tuyệt đối không tự đóng lại contactor.
+  - `HOLD_REQ`: Kích hoạt khi mất **3 nhịp keepalive liên tiếp (= 3 s)** hoặc nhận gói LoRa `HOLD`.
+- **Cờ `BRIDGE_ZONE`:** Làm mới `<= 60 s`; chỉ ức chế cắt tự động do nghiêng/tải (nút E-stop, LoRa `STOP`, 4G STOP, Watchdog STOP luôn có hiệu lực tuyệt đối).
+- **Chống phát lại LoRa 12 byte:** Hỗ trợ `sender_id` (tới 16 nguồn phát) và lưu `COUNTER` bền vững qua mất nguồn.
 
 ## 8. Ngân sách độ trễ phát hiện vật cản TR-4.1 <= 200 ms (Mục A.11)
 

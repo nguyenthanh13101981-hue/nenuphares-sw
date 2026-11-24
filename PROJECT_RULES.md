@@ -30,6 +30,7 @@ Agent **tuyệt đối không** sinh code, cấu hình hoặc tài liệu vi ph�
 4. **KHÔNG dùng BMS UART/CAN và KHÔNG dùng cảm biến dòng ACS:** Bỏ qua bảng A.12 cũ. Mọi giao tiếp nguồn và động lực phải bám đúng **D-22, D-24 và A.14.1–A.14.2**: đo dòng/áp chính bằng **shunt**, đối chiếu BMS qua **Bluetooth LE** (mất Bluetooth chỉ ghi cảnh báo, không dừng bè), và đọc telemetry từ **3 ESC** (không phải 2 ESC như lỗi sót ở mục B5).
 5. **Máy trạng thái đầy đủ là `S0–S12`:** Không rút gọn về `S0–S10`. Thứ tự ưu tiên cứng: `S9 > S8 > S12 > S7 > S11 > S10 > S1`.
 6. **KHÔNG hardcode kích thước hình học thân bè (TBD-06 / RI-1.5):** Thân hiện tại `70 × 50 × 25 cm` đang có rủi ro ổn định (GM âm, mạn khô ~5,4 cm) và có thể phải nâng lên `98 × 68 × 25 cm` sau thử nghiêng G-ST. Mọi khoảng cách thruster, chiều cao camera, kích thước bao an toàn phải đọc từ `config/raft_profiles/*.yaml`.
+7. **NGUỒN CHÂN LÝ MÁY ĐỌC CHO A.8 / A.10 / TR-8.3:** Mọi định nghĩa trạng thái `S0–S12`, bảng chuyển trạng thái hợp lệ, thứ tự ưu tiên và ngưỡng an toàn phải trích từ `docs/cdct_spec_a8_a10.yaml`. Cấm tự đặt lại ý nghĩa trạng thái hoặc ngưỡng mới trong code/test.
 
 ## 4. Quy chuẩn kiến trúc & hiệu năng
 

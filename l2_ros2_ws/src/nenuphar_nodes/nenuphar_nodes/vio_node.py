@@ -1,4 +1,4 @@
-"""VIO estimator wrapper skeleton (VINS-Fusion-ROS2 selected at Milestone B)."""
+"""VIO estimator wrapper (VINS-Fusion-ROS2 at Milestone B; stub disabled by default)."""
 
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image, Imu
@@ -8,10 +8,13 @@ from nenuphar_nodes.qos import SENSOR_QOS
 
 
 class VioNode(MonitoredNode):
-    """Consumes stereo + IMU on SENSOR_QOS and publishes /vio/odometry."""
+    """Consumes stereo + IMU on SENSOR_QOS; forwards external VIO or gated offline stub."""
 
-    def __init__(self) -> None:
-        super().__init__('vio')
+    def __init__(self, **kwargs) -> None:
+        super().__init__('vio', **kwargs)
+        # Safety (A6): NEVER publish zero-pose stub Odometry to Pixhawk unless explicitly enabled.
+        self.declare_parameter('enable_stub_odom', False)
+
         self.left_sub = self.create_subscription(
             Image, '/camera/stereo/left', self._on_stereo_left, SENSOR_QOS
         )
@@ -36,10 +39,13 @@ class VioNode(MonitoredNode):
 
     def _on_imu(self, msg: Imu) -> None:
         self.last_imu_msg = msg
+        if not bool(self.get_parameter('enable_stub_odom').value):
+            return
         odom = Odometry()
         odom.header.stamp = msg.header.stamp
         odom.header.frame_id = 'odom'
         odom.child_frame_id = 'base_link'
+        odom.pose.pose.orientation.w = 1.0
         self.odom_pub.publish(odom)
 
 

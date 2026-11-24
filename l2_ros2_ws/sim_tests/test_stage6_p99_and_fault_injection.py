@@ -24,7 +24,7 @@ from rclpy.parameter import Parameter
 
 os.environ['MAVLINK20'] = '1'
 
-REPO_ROOT = Path('/home/nenuphar/nenuphares-sw')
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / 'l2_ros2_ws/src/nenuphar_nodes'))
 
 from nenuphar_msgs.msg import EnergyStatus, MissionState  # noqa: E402
@@ -118,6 +118,7 @@ def test_stage6_a11_p99_latency_and_four_fault_injections() -> None:
         )
         sysmon = SystemMonitorNode(
             parameter_overrides=[
+                Parameter('usb3_check_mode', value='param'),
                 Parameter('usb3_camera_ok', value=False),
                 Parameter('publish_period_s', value=0.25),
             ]

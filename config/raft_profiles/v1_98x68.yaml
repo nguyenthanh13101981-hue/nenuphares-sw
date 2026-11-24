@@ -10,6 +10,7 @@ hull:
   width_m: 0.68
   height_m: 0.25
   freeboard_nominal_m: null   # Chờ đo thực tế sau thử nghiêng G-ST (TBD-06)
+  total_height_above_water_m: 0.45  # Chiều cao trên mặt nước gồm mạn khô + camera/vật thể di sản [chờ C2/C3]
 
 # Quy ước hệ tọa độ thân bè (base_link): +X về mũi, +Y sang trái (port), +Z hướng lên từ mặt boong.
 camera_oak_d_pro_w:

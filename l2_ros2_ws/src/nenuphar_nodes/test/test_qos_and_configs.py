@@ -8,7 +8,7 @@ from nenuphar_nodes.config_loader import (
     load_energy_config,
     load_raft_profile,
 )
-from nenuphar_nodes.energy_node import classify_energy_level
+from nenuphar_nodes.energy_logic import classify_energy_level
 from nenuphar_nodes.qos import CMD_QOS, SENSOR_QOS
 
 
@@ -28,8 +28,10 @@ def test_raft_profiles_and_final20_invariants() -> None:
 
     assert p70['hull']['length_m'] == 0.70
     assert p70['hull']['width_m'] == 0.50
+    assert p70['hull']['total_height_above_water_m'] > 0.0
     assert p98['hull']['length_m'] == 0.98
     assert p98['hull']['width_m'] == 0.68
+    assert p98['hull']['total_height_above_water_m'] > 0.0
 
     for prof in (p70, p98):
         cam = prof['camera_oak_d_pro_w']
@@ -61,6 +63,9 @@ def test_energy_and_corridor_configs() -> None:
     assert classify_energy_level(40.0, 11.5, energy_cfg) == EnergyStatus.LEVEL_STOP
 
     corridor_cfg = load_corridor_config()
-    assert corridor_cfg['corridor']['lateral_deviation_alert_m'] == 0.15
+    assert corridor_cfg['corridor']['z1_half_width_m'] == 0.30
+    assert corridor_cfg['corridor']['z2_half_width_m'] == 1.25
+    assert corridor_cfg['corridor']['obstacle_min_gap_m'] == 1.35
     assert corridor_cfg['bridge_s4']['max_speed_kmh'] == 2.0
+    assert corridor_cfg['bridge_s4']['min_margin_above_raft_m'] == 0.10
     assert corridor_cfg['obstacle_avoidance']['e2e_latency_budget_ms'] == 200.0

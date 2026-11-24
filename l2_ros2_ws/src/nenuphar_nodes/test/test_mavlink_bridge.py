@@ -1,9 +1,11 @@
-"""Unit tests for MAVLink 2 signing, ODOMETRY forwarding, and EKF source command."""
+"""Unit tests for MAVLink 2 signing, ENU->NED ODOMETRY transform, EKF source, and RX handling."""
 
 import pytest
 import rclpy
 from nav_msgs.msg import Odometry
+from nenuphar_msgs.msg import MissionState
 
+from nenuphar_nodes.fsm_engine import S5, S6
 from nenuphar_nodes.mavlink_bridge_node import (
     MavlinkBridgeNode,
     configure_mavlink2_signing,
@@ -32,15 +34,28 @@ def test_mavlink2_signing_key_parsing_and_setup() -> None:
         parse_signing_key('deadbeef')
 
 
-def test_mavlink_bridge_counts_vio_odom_and_ekf_source_set() -> None:
+def test_mavlink_bridge_wires_odom_ekf_and_c8_signals() -> None:
     rclpy.init()
     node = MavlinkBridgeNode()
     try:
         assert node.tx_odom_count == 0
-        node._on_vio(Odometry())
+        odom = Odometry()
+        odom.pose.pose.orientation.w = 1.0
+        node._on_vio(odom)
         assert node.tx_odom_count == 1
-        node.send_ekf_source_set(2)
+
+        st5 = MissionState()
+        st5.state = S5
+        st5.bridge_permit = True
+        node._on_fsm_state(st5)
         assert node.last_ekf_source_set == 2
+        assert node.tx_c8_bridge_zone_count >= 1
+
+        st6 = MissionState()
+        st6.state = S6
+        st6.bridge_permit = False
+        node._on_fsm_state(st6)
+        assert node.last_ekf_source_set == 1
     finally:
         node.destroy_node()
         if rclpy.ok():

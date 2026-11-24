@@ -1,10 +1,11 @@
-"""System monitor aggregating node heartbeats and USB 3 camera check -> /system/health."""
+"""System monitor aggregating node heartbeats and real sysfs USB 3 check -> /system/health."""
 
 from pathlib import Path
 import time
 from typing import Dict
 
 from nenuphar_msgs.msg import SystemHealth
+from rclpy.node import Node
 from std_msgs.msg import String
 
 from nenuphar_nodes.base_node import (
@@ -13,7 +14,7 @@ from nenuphar_nodes.base_node import (
     run_node_main,
 )
 from nenuphar_nodes.qos import CMD_QOS
-from rclpy.node import Node
+from nenuphar_nodes.usb_probe import detect_oakd_usb3_sysfs
 
 
 def _read_cpu_temp_c() -> float:
@@ -26,11 +27,13 @@ def _read_cpu_temp_c() -> float:
 
 
 class SystemMonitorNode(Node):
-    """Aggregates node liveness into 1 Hz /system/health for mavlink_bridge & mission_fsm."""
+    """Aggregates node liveness & USB 3 SuperSpeed link check into 1 Hz /system/health."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__('system_monitor', **kwargs)
-        self.declare_parameter('usb3_camera_ok', True)
+        self.declare_parameter('usb3_check_mode', 'auto')  # 'auto' (sysfs) | 'param'
+        self.declare_parameter('usb3_camera_ok', False)
+        self.declare_parameter('usb_sysfs_path', '/sys/bus/usb/devices')
         self.declare_parameter('heartbeat_timeout_s', 3.0)
         self.declare_parameter('publish_period_s', 1.0)
 
@@ -60,12 +63,20 @@ class SystemMonitorNode(Node):
                 mask |= 1 << idx
         return mask
 
+    def _check_usb3(self) -> bool:
+        mode = str(self.get_parameter('usb3_check_mode').value).strip().lower()
+        if mode == 'param':
+            return bool(self.get_parameter('usb3_camera_ok').value)
+        sysfs_root = Path(str(self.get_parameter('usb_sysfs_path').value))
+        ok, _speed = detect_oakd_usb3_sysfs(sysfs_root)
+        return ok
+
     def publish_health(self) -> SystemHealth:
         """Build and publish SystemHealth message."""
         mask = self.compute_failed_mask(time.monotonic())
         msg = SystemHealth()
         msg.stamp = self.get_clock().now().to_msg()
-        msg.usb3_camera_ok = bool(self.get_parameter('usb3_camera_ok').value)
+        msg.usb3_camera_ok = self._check_usb3()
         msg.failed_node_mask = mask
         msg.all_nodes_alive = mask == 0
         msg.cpu_temp_c = _read_cpu_temp_c()
