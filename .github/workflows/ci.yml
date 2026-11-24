@@ -33,12 +33,22 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ros:jazzy-ros-base
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Install Python test dependencies
+      - name: Install build and test dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3-yaml python3-pytest ros-jazzy-rosbag2-py ros-jazzy-rosidl-runtime-py
+          apt-get install -y --no-install-recommends \
+            python3-yaml \
+            python3-pytest \
+            python3-colcon-common-extensions \
+            ros-jazzy-ament-lint-auto \
+            ros-jazzy-rosbag2-py \
+            ros-jazzy-rosbag2-storage-sqlite3 \
+            ros-jazzy-rosidl-runtime-py
       - name: Build and test L2 ROS 2 Jazzy workspace
         run: |
           set -e

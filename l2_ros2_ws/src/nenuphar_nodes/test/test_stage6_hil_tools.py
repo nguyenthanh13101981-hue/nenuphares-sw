@@ -14,7 +14,7 @@ from nenuphar_nodes.latency_probe import (
     evaluate_a11_budget,
 )
 
-REPO_ROOT = Path('/home/nenuphar/nenuphares-sw')
+REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT / 'tools'))
 from analyze_blackbox_bag import analyze_bag  # noqa: E402
 
