@@ -128,9 +128,9 @@ flowchart TD
 | **L0 Bo C8 (`ctest`)** | `10/10` GTest trên `MockC8Hal` (bắt sườn start/reset, TR-8.3, cảm biến `NaN`/trễ, lưu counter qua reboot, 4G/WD STOP, `30/30` E-stop) | PASS (Mock HAL; firmware Pico 2 đang ở dạng khung) |
 | **L2 Logic lõi (`test_core_logic_host.py`)** | `6/6` test thuần Python (property Tầng 3 trên cả `13` trạng thái `S0..S12`, ENU→NED, hành lang TR-4.16, hysteresis A.9.3, tĩnh không S4, sysfs USB 3) | PASS (Host Unit + Property) |
 | **L1 Lua & Failsafe (`test_l1_sitl_failsafes.py`)** | SITL ArduPilot Rover Boat sống (`M1–M4`, nén dòng `70/40 A`, WD `3 s`, giữ quyền `MANUAL`, `BATT_FS_*`, `FENCE_*`, `EKF source 2`) | PASS (SITL kịch bản) |
-| **L2 ROS 2 (`colcon test`)** | 11 node, `SENSOR_QOS`, chuỗi heartbeat + keepalive C8, `/operator/cmd`, `rosbag2` | PASS trên CI container `ros:jazzy-ros-base` |
+| **L2 ROS 2 (`colcon test`)** | `24/24` PASS (`11` node, `SENSOR_QOS`, heartbeat + keepalive C8, `/operator/cmd`, `rosbag2`) | PASS trên ROS 2 Jazzy |
 | **Độ phủ A.8 (`test_sitl_fsm_a8_coverage.py`)** | `52/52` cạnh hợp lệ theo `cdct_spec_a8_a10.yaml`, `0` cạnh ngoài bảng | PASS (SITL kịch bản) |
-| **Số liệu độ trễ demo minh họa** | Trên node stub (`demo_summary.json`): `P99 = 26,61 ms`, nhưng **`max_ms = 2.823 ms`** (do outlier khởi động/GC trên stub); chưa có camera/nhận thức thật | Minh họa khung đo; **chờ HIL camera thật** |
+| **Số liệu độ trễ demo minh họa** | Trên node stub (`demo_summary.json`): `L2 P99 = 14,13 ms`, `L2 Max = 26,52 ms` (tổng P99 + HW `128,13 ms`, tổng Max + HW `140,52 ms`); chưa có camera/nhận thức thật | Minh họa khung đo; **chờ HIL camera thật** |
 
 ![Quỹ đạo hành lang Z1/Z2](demo_output/fig1_quy_dao_hanh_lang.png)
 

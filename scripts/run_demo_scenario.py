@@ -51,6 +51,7 @@ from nenuphar_nodes.latency_probe import (  # noqa: E402
     compute_latency_stats,
     evaluate_a11_budget,
 )
+from nenuphar_nodes.mavlink_transforms import ros_enu_odom_to_mavlink_ned  # noqa: E402
 from nenuphar_nodes.mavlink_bridge_node import MavlinkBridgeNode  # noqa: E402
 from nenuphar_nodes.mission_fsm_node import MissionFsmNode  # noqa: E402
 from nenuphar_nodes.perception_geom_node import PerceptionGeomNode  # noqa: E402
@@ -237,26 +238,34 @@ def _send_ekf_source(master, source_set: int) -> bool:
 
 
 def _send_vio_odometry(master, x_m: float, y_m: float, yaw_rad: float, vx: float, vy: float) -> None:
-    cov = [float('nan')] + [0.0] * 20
-    qz = math.sin(yaw_rad * 0.5)
-    qw = math.cos(yaw_rad * 0.5)
+    now_s = time.time()
+    sec = int(now_s)
+    nsec = int((now_s - sec) * 1_000_000_000)
+    payload = ros_enu_odom_to_mavlink_ned(
+        pos_enu=(x_m, y_m, 0.0),
+        quat_xyzw_enu_flu=(0.0, 0.0, math.sin(yaw_rad * 0.5), math.cos(yaw_rad * 0.5)),
+        vel_flu=(math.hypot(vx, vy), 0.0, 0.0),
+        ang_vel_flu=(0.0, 0.0, 0.0),
+        stamp_sec=sec,
+        stamp_nanosec=nsec,
+    )
     master.mav.odometry_send(
-        int(time.time() * 1e6),
-        mavutil.mavlink.MAV_FRAME_LOCAL_FRD,
-        mavutil.mavlink.MAV_FRAME_BODY_FRD,
-        float(x_m),
-        float(y_m),
-        0.0,
-        [qw, 0.0, 0.0, qz],
-        float(vx),
-        float(vy),
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        cov,
-        cov,
-        0,
+        payload.time_usec,
+        payload.frame_id,
+        payload.child_frame_id,
+        payload.x_ned,
+        payload.y_ned,
+        payload.z_ned,
+        list(payload.q_wxyz),
+        payload.vx_frd,
+        payload.vy_frd,
+        payload.vz_frd,
+        payload.rollspeed_frd,
+        payload.pitchspeed_frd,
+        payload.yawspeed_frd,
+        payload.pose_covariance,
+        payload.velocity_covariance,
+        payload.reset_counter,
         mavutil.mavlink.MAV_ESTIMATOR_TYPE_VIO,
         100,
     )
@@ -494,7 +503,7 @@ def main() -> int:
             _drain_sitl()
 
             x_m, y_m, yaw_rad, speed_mps = _trajectory_pose(t_sim)
-            zone = 2 if x_m >= 46.0 else 1
+            zone = 2 if abs(y_m) > 0.30 else 1
             soc_pct = _soc_profile(t_sim)
             voltage_v = 11.6 + 1.6 * (soc_pct / 100.0)
             ble_ok = t_sim < 39.5
@@ -519,7 +528,10 @@ def main() -> int:
                 events.append({'t_s': t_sim, 'code': 'S11', 'label': 'Phát hiện vật cản -> Lách S11'})
             if t_sim >= 21.0 and 'bridge_app' not in triggered:
                 triggered.add('bridge_app')
-                events.append({'t_s': t_sim, 'code': 'S2/S3', 'label': 'Tiếp cận & Canh giữa cầu (<= 2 km/h)'})
+                events.append({'t_s': t_sim, 'code': 'S2', 'label': 'Tiếp cận cầu (>= 10 m, <= 2 km/h)'})
+            if t_sim >= 22.5 and 'bridge_center' not in triggered:
+                triggered.add('bridge_center')
+                events.append({'t_s': t_sim, 'code': 'S3', 'label': 'Canh giữa hai thành cầu (±25 cm)'})
             if t_sim >= 24.0 and 'bridge_s4' not in triggered:
                 triggered.add('bridge_s4')
                 _set_param(master, 'SCR_USER4', 1.0)  # BRIDGE_PERMIT = 1
@@ -609,8 +621,8 @@ def main() -> int:
                 start_mission=(t_sim >= 3.0),
                 obstacle_detected=(13.0 <= t_sim < 21.0),
                 obstacle_gap_m=1.50,
-                bridge_detected=(21.0 <= t_sim < 24.0),
-                at_bridge_centering=(22.0 <= t_sim < 24.0),
+                bridge_detected=(21.0 <= t_sim < 27.0),
+                at_bridge_centering=(22.5 <= t_sim < 27.0),
                 bridge_centered=(24.0 <= t_sim < 27.0),
                 bridge_clearance_ready=(27.0 <= t_sim < 34.0),
                 bridge_pass_permitted=(27.0 <= t_sim < 34.0),
@@ -714,7 +726,7 @@ def main() -> int:
                 m_cor = CorridorStatus()
                 m_cor.zone = int(zone)
                 m_cor.lateral_error_m = float(y_m)
-                m_cor.deviation_alert = abs(y_m) > 0.15
+                m_cor.deviation_alert = (abs(y_m) > 0.30) and (fsm_out.state != S11)
                 writer.write('/corridor/status', serialize_message(m_cor), ts_ns)
 
                 m_hl = SystemHealth()
@@ -741,9 +753,15 @@ def main() -> int:
                 w.writerow([idx, round(val, 4)])
 
         lat_stats = compute_latency_stats(lat_samples)
-        lat_budget = evaluate_a11_budget(lat_stats['p99_ms'])
+        lat_budget = evaluate_a11_budget(
+            lat_stats['p99_ms'], l2_pipeline_max_ms=lat_stats['max_ms']
+        )
 
         summary = {
+            'demo_disclaimer': (
+                'Kịch bản minh họa dựng sẵn (scripted scenario) — '
+                'không phải dữ liệu đo vòng kín trên bè thật.'
+            ),
             'duration_s': duration_s,
             'fps': fps,
             'telemetry_rows': len(rows),
@@ -757,11 +775,11 @@ def main() -> int:
             'a11_budget': lat_budget,
             'events': events,
             'a13_test_summary': {
-                'L0 Bo C8\n(GTest)': {'passed': 6, 'total': 6, 'note': '30/30 E-stop'},
-                'L1 Lua\n(SITL)': {'passed': 4, 'total': 4, 'note': 'M1-M4, 70/40A, WD, EKF'},
-                'L2 ROS 2\n(colcon)': {'passed': 17, 'total': 17, 'note': '11 node, QoS, bag'},
-                'SITL Phủ\nbảng A.8': {'passed': 41, 'total': 41, 'note': '0 lỗi ngoài bảng'},
-                'Tiêm lỗi\nGĐ 6': {'passed': 4, 'total': 4, 'note': 'USB3, BLE, WD, LoRa'},
+                'L0 Bo C8\n(Mock HAL)': {'passed': 10, 'total': 10, 'note': 'TR-8.3, 30/30 mock'},
+                'L2 Logic lõi\n(Host/Prop)': {'passed': 6, 'total': 6, 'note': 'A.8, ENU->NED, TR-4.16'},
+                'L1 Lua\n(SITL)': {'passed': 4, 'total': 4, 'note': 'M1-M4, EMA, WD, Fence'},
+                'L2 ROS 2\n(colcon)': {'passed': 24, 'total': 24, 'note': '11 node, QoS, bag'},
+                'SITL Phủ\nCdCT A.8': {'passed': 52, 'total': 52, 'note': '0 lỗi ngoài bảng'},
             },
         }
         (DEMO_OUT / 'demo_summary.json').write_text(

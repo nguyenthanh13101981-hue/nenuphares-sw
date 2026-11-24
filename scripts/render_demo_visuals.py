@@ -134,15 +134,16 @@ def _draw_canal_backdrop(ax) -> None:
     ax.axhline(2.0, color='#475569', lw=2.0, zorder=2)
     ax.axhline(-2.0, color='#475569', lw=2.0, zorder=2)
 
-    # Corridor zones Z1 (0..36) & Z2 (46..66)
-    ax.axvspan(0.0, 36.0, ymin=0.12, ymax=0.88, color='#BAE6FD', alpha=0.28, zorder=1)
-    ax.axvspan(46.0, 66.5, ymin=0.12, ymax=0.88, color='#CCFBF1', alpha=0.35, zorder=1)
-    ax.text(10.0, 1.62, 'HÀNH LANG Z1', fontsize=9.5, fontweight='bold', color='#0369A1', zorder=4)
-    ax.text(52.5, 1.62, 'HÀNH LANG Z2', fontsize=9.5, fontweight='bold', color='#0F766E', zorder=4)
-
-    # D-16 +/- 0.15 m center corridor guide
-    ax.axhline(0.0, color='#0284C7', ls=':', lw=1.0, alpha=0.65, zorder=2)
-    ax.axhspan(-0.15, 0.15, color='#38BDF8', alpha=0.18, zorder=1)
+    # Lateral corridor zones per TR-4.16: Z2 (±1.25 m) and Z1 (±0.30 m)
+    ax.axhspan(-1.25, 1.25, color='#CCFBF1', alpha=0.35, zorder=1)
+    ax.axhline(1.25, color='#0F766E', ls='--', lw=1.2, alpha=0.75, zorder=2)
+    ax.axhline(-1.25, color='#0F766E', ls='--', lw=1.2, alpha=0.75, zorder=2)
+    ax.axhspan(-0.30, 0.30, color='#7DD3FC', alpha=0.25, zorder=1)
+    ax.axhline(0.30, color='#0284C7', ls=':', lw=1.2, alpha=0.80, zorder=2)
+    ax.axhline(-0.30, color='#0284C7', ls=':', lw=1.2, alpha=0.80, zorder=2)
+    ax.axhline(0.0, color='#0284C7', ls='-.', lw=0.9, alpha=0.60, zorder=2)
+    ax.text(10.0, 1.48, 'HÀNH LANG Z2 (±1,25 m — Lách S11)', fontsize=9.0, fontweight='bold', color='#0F766E', zorder=4)
+    ax.text(10.0, 0.42, 'Z1 (±0,30 m — Tuần tra)', fontsize=8.5, fontweight='bold', color='#0369A1', zorder=4)
 
     # Dock / Base at x=0..3.5
     dock = patches.Rectangle((-1.2, -0.75), 3.2, 1.5, facecolor='#334155', edgecolor='#0F172A', lw=1.5, zorder=3)
@@ -183,13 +184,13 @@ def render_fig1_trajectory(rows: List[Dict[str, object]]) -> None:
     states = np.array([r['fsm_state'] for r in rows])
     navs = [r['nav_source'] for r in rows]
 
-    # Plot color-coded trajectory segments by phase
+    # Plot color-coded trajectory segments by phase (CdCT Final A.8)
     phase_specs = [
         ('Tuần tra GNSS (S1)', (states == 1) & (ts < 36.5), '#0284C7', 2.6),
-        ('Lách vật cản (S2)', states == 2, '#EA580C', 3.2),
-        ('Tiếp cận / Đo cầu (S3/S4)', (states == 3) | (states == 4), '#0D9488', 3.0),
+        ('Lách vật cản (S11)', states == 11, '#EA580C', 3.2),
+        ('Tiếp cận / Canh giữa / Đo cầu (S2/S3/S4)', (states == 2) | (states == 3) | (states == 4), '#0D9488', 3.0),
         ('Qua gầm cầu — VIO (S5)', states == 5, '#7C3AED', 3.4),
-        ('Chế độ dự phòng M2 + mất BLE (Z2)', (states == 1) & (ts >= 36.5), '#059669', 2.8),
+        ('Dự phòng M2 + mất BLE (S1)', (states == 1) & (ts >= 36.5), '#059669', 2.8),
         ('Quay về bến RTB (S10)', states == 10, '#D97706', 3.0),
         ('Dừng khẩn cấp E-stop C8 (S9)', states == 9, '#DC2626', 3.5),
     ]
@@ -201,8 +202,8 @@ def render_fig1_trajectory(rows: List[Dict[str, object]]) -> None:
     # Annotate key points on map
     annotations = [
         (3.0, 'S0→S1\nRời bến', (6, -1.65)),
-        (17.0, 'S2 Lách vật cản\n(Config A 400P)', (19.5, -1.78)),
-        (25.5, 'S4 Đo cầu\n(2.85 m, ±3 cm)', (31.5, -1.65)),
+        (17.0, 'S11 Lách vật cản\n(Config A, g≥1,35 m)', (19.5, -1.78)),
+        (25.5, 'S4 Đo cầu\n(Config B 800P)', (31.5, -1.65)),
         (36.8, 'M1→M2 (Hỏng Trái)\n& Mất BLE BMS', (53.5, -1.55)),
         (46.0, 'RTB S10\n(Pin ~21%)', (61.5, -1.55)),
         (51.8, 'E-STOP C8\n(STOPPED)', (50.2, 1.50)),
@@ -224,16 +225,18 @@ def render_fig1_trajectory(rows: List[Dict[str, object]]) -> None:
         )
 
     ax_map.set_title(
-        'Hình 1: Bản đồ quỹ đạo mô phỏng tổng hợp bè tự hành NÉNUPHARES V1 trên hành lang Z1/Z2',
-        fontsize=12.5, fontweight='bold', color='#0F172A', pad=10,
+        'Hình 1: Minh họa kịch bản dựng sẵn (Scripted) — Quỹ đạo hành lang Z1/Z2 theo TR-4.16 & CdCT A.8',
+        fontsize=12.0, fontweight='bold', color='#0F172A', pad=10,
     )
     ax_map.legend(loc='lower left', ncol=4, fontsize=8.0, framealpha=0.95)
 
-    # Bottom subplot: lateral corridor error vs +/- 0.15 m threshold
-    ax_err.plot(ts, ys * 100.0, color='#0284C7', lw=2.0, label='Sai lệch ngang thực tế Y (cm)')
-    ax_err.axhline(15.0, color='#DC2626', ls='--', lw=1.3, label='Ngưỡng cảnh báo hành lang D-16 (±15 cm)')
-    ax_err.axhline(-15.0, color='#DC2626', ls='--', lw=1.3)
-    ax_err.axvspan(13.0, 21.0, color='#FED7AA', alpha=0.45, label='Pha lách vật cản chủ động (S2)')
+    # Bottom subplot: lateral corridor error vs Z1 (±30 cm) & Z2 (±125 cm)
+    ax_err.plot(ts, ys * 100.0, color='#0284C7', lw=2.0, label='Sai lệch ngang Y (cm)')
+    ax_err.axhline(30.0, color='#EA580C', ls='--', lw=1.3, label='Biên Z1 TR-4.16 (±30 cm)')
+    ax_err.axhline(-30.0, color='#EA580C', ls='--', lw=1.3)
+    ax_err.axhline(125.0, color='#DC2626', ls=':', lw=1.3, label='Biên Z2 TR-4.16 (±125 cm)')
+    ax_err.axhline(-125.0, color='#DC2626', ls=':', lw=1.3)
+    ax_err.axvspan(13.0, 21.0, color='#FED7AA', alpha=0.45, label='Pha lách vật cản S11 (Trong Z2)')
     ax_err.axvspan(27.0, 34.0, color='#DDD6FE', alpha=0.45, label='Vùng cầu — Nguồn VIO (S5)')
     ax_err.axvspan(45.5, 51.5, color='#FEF3C7', alpha=0.55, label='Quay đầu & RTB (S10)')
     ax_err.set_xlim(0.0, 55.0)
@@ -269,7 +272,8 @@ def render_fig2_timeseries(rows: List[Dict[str, object]], summary: Dict[str, obj
 
     event_markers = [
         (3.0, 'S0→S1', '#0284C7'),
-        (13.0, 'S2 Vật cản', '#EA580C'),
+        (13.0, 'S11 Vật cản', '#EA580C'),
+        (21.0, 'S2/S3 Cầu', '#0D9488'),
         (24.0, 'S4 Đo cầu', '#7C3AED'),
         (27.0, 'S5 VIO', '#6D28D9'),
         (36.5, 'Hỏng Trái→M2', '#DC2626'),
@@ -284,23 +288,23 @@ def render_fig2_timeseries(rows: List[Dict[str, object]], summary: Dict[str, obj
             ax.axvline(t_ev, color=col, ls=':', lw=1.0, alpha=0.65)
         ax.grid(True, linestyle='--', alpha=0.35)
 
-    # Panel 1: FSM State S0..S12
-    axes[0].step(ts, states, where='post', color='#0F172A', lw=2.3, label='Trạng thái nhiệm vụ FSM (S0–S12)')
-    axes[0].set_yticks([0, 1, 2, 3, 4, 5, 6, 9, 10, 12])
-    axes[0].set_yticklabels(['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S9', 'S10', 'S12'], fontsize=8.5)
-    axes[0].set_ylim(-0.7, 13.5)
+    # Panel 1: FSM State S0..S12 (CdCT A.8)
+    axes[0].step(ts, states, where='post', color='#0F172A', lw=2.3, label='Trạng thái nhiệm vụ FSM (CdCT A.8 S0–S12)')
+    axes[0].set_yticks([0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12])
+    axes[0].set_yticklabels(['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S9', 'S10', 'S11', 'S12'], fontsize=8.0)
+    axes[0].set_ylim(-0.7, 13.8)
     axes[0].set_ylabel('Trạng thái FSM', fontsize=9.5, fontweight='bold')
     axes[0].legend(loc='center left', bbox_to_anchor=(0.0, 0.62), fontsize=8.5, framealpha=0.95)
     for idx, (t_ev, lbl, col) in enumerate(event_markers):
-        y_pos = 12.1 if idx % 2 == 0 else 10.3
-        axes[0].text(t_ev + 0.25, y_pos, lbl, fontsize=7.6, fontweight='bold', color=col,
+        y_pos = 12.3 if idx % 2 == 0 else 10.5
+        axes[0].text(t_ev + 0.25, y_pos, lbl, fontsize=7.4, fontweight='bold', color=col,
                      bbox=dict(boxstyle='round,pad=0.15', facecolor='white', edgecolor=col, alpha=0.88))
 
     # Panel 2: Battery SoC & BLE status
-    axes[1].plot(ts, soc, color='#0284C7', lw=2.3, label='Dung lượng pin SoC (%) — Đo chính qua Shunt (1.280 Wh)')
-    axes[1].axhline(28.0, color='#D97706', ls='--', lw=1.3, label='Ngưỡng WARN (~28%)')
+    axes[1].plot(ts, soc, color='#0284C7', lw=2.3, label='Dung lượng pin SoC (%) — Shunt chính (1.280 Wh)')
+    axes[1].axhline(28.0, color='#D97706', ls='--', lw=1.3, label='WARN A.9.3 (vào 28% / thoát 30%)')
     axes[1].axhline(21.0, color='#EA580C', ls='--', lw=1.3, label='Ngưỡng RTB S10 (~21%)')
-    axes[1].axhline(10.0, color='#DC2626', ls='--', lw=1.3, label='Ngưỡng dừng STOP (≤ 10%)')
+    axes[1].axhline(10.0, color='#DC2626', ls='--', lw=1.3, label='Ngưỡng ĐDKC S12 (≤ 10%, còn đẩy)')
     axes[1].fill_between(ts, 0, 100, where=(ble == 0), color='#FEF3C7', alpha=0.45, label='Mất Bluetooth LE BMS (Chỉ cảnh báo — TBD-23)')
     axes[1].set_ylim(0, 95)
     axes[1].set_ylabel('Pin SoC (%)', fontsize=9.5, fontweight='bold')
@@ -331,8 +335,8 @@ def render_fig2_timeseries(rows: List[Dict[str, object]], summary: Dict[str, obj
     axes[3].legend(loc='upper left', ncol=3, fontsize=8.0, framealpha=0.95)
 
     fig.suptitle(
-        'Hình 2: Chuỗi thời gian đa tầng L0–L1–L2 và các mốc tiêm lỗi (Dữ liệu SITL + ROS 2 Jazzy + Bo C8)',
-        fontsize=12.5, fontweight='bold', color='#0F172A', y=0.995,
+        'Hình 2: Chuỗi thời gian đa tầng L0–L1–L2 (Minh họa kịch bản dựng sẵn: SITL + ROS 2 Stub + C8)',
+        fontsize=12.0, fontweight='bold', color='#0F172A', y=0.995,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.975])
     fig.savefig(DEMO_OUT / 'fig2_chuoi_thoi_gian_su_kien.png', dpi=300)
@@ -358,17 +362,17 @@ def render_fig3_p99_and_tests(latencies: List[float], summary: Dict[str, object]
     ax_hist.set_xlim(0.0, x_upper)
     ax_hist.axvline(stats['p50_ms'], color='#16A34A', ls='--', lw=1.8, label=f"P50 = {stats['p50_ms']:.2f} ms")
     ax_hist.axvline(stats['p95_ms'], color='#D97706', ls='--', lw=1.8, label=f"P95 = {stats['p95_ms']:.2f} ms")
-    ax_hist.axvline(stats['p99_ms'], color='#DC2626', ls='-', lw=2.2, label=f"P99 = {stats['p99_ms']:.2f} ms (Trần L2 = 65 ms)")
-    ax_hist.set_title(f"Phân bố độ trễ chuỗi L2 đo thực tế (N = {int(stats['count'])} khung 15 Hz)",
-                      fontsize=10.5, fontweight='bold', color='#0F172A')
-    ax_hist.set_xlabel('Độ trễ chuỗi L2: camera → perception → fsm → bridge (ms)', fontsize=8.8)
+    ax_hist.axvline(stats['p99_ms'], color='#DC2626', ls='-', lw=2.2, label=f"P99 = {stats['p99_ms']:.2f} ms (Max = {stats['max_ms']:.1f} ms)")
+    ax_hist.set_title(f"Phân bố độ trễ L2 trên node stub (N = {int(stats['count'])} khung 15 Hz)",
+                      fontsize=10.2, fontweight='bold', color='#0F172A')
+    ax_hist.set_xlabel('Độ trễ chuỗi L2 stub: camera → perception → fsm → bridge (ms)', fontsize=8.8)
     ax_hist.set_ylabel('Số khung hình', fontsize=9.0, fontweight='bold')
     ax_hist.grid(True, linestyle='--', alpha=0.35)
-    ax_hist.legend(loc='upper right', fontsize=8.0, framealpha=0.95)
+    ax_hist.legend(loc='upper right', fontsize=7.8, framealpha=0.95)
 
     # Bottom-left: Stacked bar breakdown A.11 Config A (measured L2 P99) vs Config B vs 200 ms TR-4.1
     ax_bar = fig.add_subplot(gs[1, 0])
-    labels = ['Config A 400P\n(Đo thực + HW)', 'Config A 400P\n(Ngân sách A.11)', 'Config B 800P\n(Chỉ đo cầu S4)']
+    labels = ['Config A 400P\n(Stub L2 + HW)', 'Config A 400P\n(Ngân sách A.11)', 'Config B 800P\n(Chỉ đo cầu S4)']
     parts = [
         ('Chờ khung 15 Hz + phơi sáng', [72.0, 72.0, 72.0], '#94A3B8'),
         ('Xử lý OAK-D Pro W', [21.0, 21.0, 67.0], '#38BDF8'),
@@ -421,25 +425,24 @@ def render_fig3_p99_and_tests(latencies: List[float], summary: Dict[str, object]
     ax_card = fig.add_subplot(gs[1, 1])
     ax_card.axis('off')
     callout = (
-        "XÁC NHẬN TRONG PHIÊN MÔ PHỎNG DEMO TRỰC TIẾP\n"
-        "──────────────────────────────────────────────\n"
-        f"• Chuyển nguồn EKF S5 (GNSS → VIO 25 Hz): {'ĐẠT (ACCEPTED)' if summary['ekf_switch_s5_vio_accepted'] else 'LỖI'}\n"
-        f"• Khôi phục EKF S6 (VIO → GNSS): {'ĐẠT (ACCEPTED)' if summary['ekf_switch_s6_gnss_accepted'] else 'LỖI'}\n"
+        "TÓM TẮT KỊCH BẢN MINH HỌA DỰNG SẴN (CHƯA PHẢI HIL THẬT)\n"
+        "───────────────────────────────────────────────────────────\n"
+        f"• Chuyển EKF S5 (GNSS → VIO): {'ĐẠT' if summary['ekf_switch_s5_vio_accepted'] else 'LỖI'} | Khôi phục S6: {'ĐẠT' if summary['ekf_switch_s6_gnss_accepted'] else 'LỖI'}\n"
         f"• Chốt cứng C8 STOPPED sau lệnh LoRa RUN: {'ĐẠT (EN ISO 13850)' if summary['c8_latched_stopped_after_lora_run_attempt'] else 'LỖI'}\n"
         f"• Trộn lực đẩy Lua cuối phiên: M{summary['final_sitl_mix_mode']} (Trần dòng {summary['final_sitl_curr_lim_a']:.0f} A)\n"
-        f"• Độ trễ L2 đo thực tế: P50={stats['p50_ms']:.2f} ms | P95={stats['p95_ms']:.2f} ms | P99={stats['p99_ms']:.2f} ms\n"
-        f"• Ngân sách xấu nhất TR-4.1: {budget['total_e2e_worst_case_ms']:.1f} ms ≤ 200 ms (ĐẠT)\n"
-        f"• Hộp đen rosbag2: 55.0 s (~0.14 GB / 24h, đạt NVMe 256 GB)"
+        f"• Độ trễ L2 (stub): P50={stats['p50_ms']:.2f} | P95={stats['p95_ms']:.2f} | P99={stats['p99_ms']:.2f} | Max={stats['max_ms']:.1f} ms\n"
+        f"• Ngân sách P99 + HW: {budget['total_e2e_worst_case_ms']:.1f} ms ≤ 200 ms (Chờ đo camera thật)\n"
+        "• Ghi chú: Kịch bản dựng sẵn minh họa kiến trúc — chờ kiểm thử HIL"
     )
     ax_card.text(
         0.02, 0.92, callout, transform=ax_card.transAxes,
-        fontsize=9.2, verticalalignment='top', linespacing=1.55, color='#0F172A',
+        fontsize=8.9, verticalalignment='top', linespacing=1.55, color='#0F172A',
         bbox=dict(boxstyle='round,pad=0.65', facecolor='#F0FDF4', edgecolor='#16A34A', lw=1.6),
     )
 
     fig.suptitle(
-        'Hình 3: Phân bố độ trễ P99 so với trần 200 ms (Mục A.11) & Tổng hợp kiểm thử A.13',
-        fontsize=13.0, fontweight='bold', color='#0F172A', y=0.975,
+        'Hình 3: Độ trễ khung đo trên node stub (A.11) & Tổng hợp kiểm thử Unit / Mock / SITL kịch bản',
+        fontsize=12.2, fontweight='bold', color='#0F172A', y=0.975,
     )
     plt.subplots_adjust(left=0.11, right=0.97, top=0.90, bottom=0.09)
     fig.savefig(DEMO_OUT / 'fig3_do_tre_P99_va_kiem_thu.png', dpi=300)
@@ -452,9 +455,11 @@ def _scenario_banner_text(t: float) -> str:
     if t < 13.0:
         return 'Tình huống 1: Tuần tra bình thường S1 trong hành lang Z1 (GNSS 2 ăng-ten, M1)'
     if t < 21.0:
-        return 'Tình huống 2: Phát hiện vật cản (Config A 400P) → Lách an toàn S2'
+        return 'Tình huống 2: Phát hiện vật cản (Config A 400P) → Lách an toàn S11 (trong Z2)'
+    if t < 22.5:
+        return 'Tình huống 3: Tiếp cận vòm cầu Bonneval (S2 — Giảm tốc ≤ 2 km/h)'
     if t < 24.0:
-        return 'Tình huống 3: Tiếp cận vòm cầu Bonneval (S3 — Giảm tốc ≤ 2 km/h)'
+        return 'Tình huống 3: Canh giữa theo hai thành cầu (S3 — ±25 cm)'
     if t < 27.0:
         return 'Tình huống 3: Đo tĩnh không S4 (Config B 800P: 2.85 m, ±3 cm) → Cấp BRIDGE_PERMIT'
     if t < 34.0:
@@ -491,8 +496,8 @@ def render_video_1080p(rows: List[Dict[str, object]], summary: Dict[str, object]
     ax_top.add_patch(patches.Rectangle((0.0, 0.0), 1.0, 1.0, facecolor='#0F172A', edgecolor='none', zorder=0))
     ax_top.text(
         0.02, 0.65,
-        'NÉNUPHARES BONNEVAL V1 — MÔ PHỎNG TỔNG HỢP L0 (C8) + L1 (ArduPilot SITL) + L2 (11 NODE ROS 2 JAZZY)',
-        fontsize=15.0, fontweight='bold', color='#F8FAFC', va='center', zorder=2,
+        'NÉNUPHARES BONNEVAL V1 [MINH HỌA KỊCH BẢN DỰNG SẴN] — L0 (C8) + L1 (SITL) + L2 (ROS 2)',
+        fontsize=14.2, fontweight='bold', color='#F8FAFC', va='center', zorder=2,
     )
     banner_txt = ax_top.text(
         0.02, 0.24, '', fontsize=12.5, fontweight='bold', color='#38BDF8', va='center', zorder=2
@@ -511,8 +516,8 @@ def render_video_1080p(rows: List[Dict[str, object]], summary: Dict[str, object]
     ax_prog.set_ylim(0.0, 1.0)
     ax_prog.set_facecolor('#E2E8F0')
     ax_prog.set_yticks([])
-    ax_prog.set_xticks([0, 3, 13, 24, 27, 36.5, 43, 45.5, 51.5, 55])
-    ax_prog.set_xticklabels(['0s', 'S1', 'S2', 'S4', 'S5\nVIO', 'M2\nBLE', 'WARN', 'RTB', 'E-STOP', '55s'], fontsize=8.5, fontweight='bold')
+    ax_prog.set_xticks([0, 3, 13, 21, 24, 27, 36.5, 43, 45.5, 51.5, 55])
+    ax_prog.set_xticklabels(['0s', 'S1', 'S11', 'S2/S3', 'S4', 'S5\nVIO', 'M2\nBLE', 'WARN', 'RTB', 'E-STOP', '55s'], fontsize=8.0, fontweight='bold')
     prog_bar = ax_prog.barh([0.5], [0.0], height=0.85, color='#0284C7')[0]
 
     # Dynamic map artists
@@ -710,7 +715,7 @@ def render_video_1080p(rows: List[Dict[str, object]], summary: Dict[str, object]
                 soc_bar.set_facecolor('#D97706')
             else:
                 soc_bar.set_facecolor('#16A34A')
-            en_lbl = {0: 'BÌNH THƯỜNG', 1: 'CẢNH BÁO WARN', 2: 'QUAY VỀ RTB', 3: 'DỪNG STOP'}[r['energy_level']]
+            en_lbl = {0: 'BÌNH THƯỜNG', 1: 'CẢNH BÁO WARN', 2: 'QUAY VỀ RTB', 3: 'ĐDKC S12 / STOP'}[r['energy_level']]
             t_soc_val.set_text(f"SoC: {r['soc_pct']:5.1f}%  ({r['voltage_v']:.2f} V)  —  {en_lbl}")
             if r['bms_ble_ok']:
                 t_ble_val.set_text('BMS Bluetooth LE: ĐÃ KẾT NỐI (Đối chiếu bình thường)')
@@ -752,8 +757,9 @@ def render_video_1080p(rows: List[Dict[str, object]], summary: Dict[str, object]
 
             # Card 6: Performance
             t_perf.set_text(
-                f"Tốc độ: {r['speed_mps']:.2f} m/s ({r['speed_mps'] * 3.6:.1f} km/h)   |   "
-                f"Độ trễ L2: {r['e2e_latency_ms']:.1f} ms   |   P99 tổng: {summary['a11_budget']['total_e2e_worst_case_ms']:.1f} ms"
+                f"Tốc độ: {r['speed_mps']:.2f} m/s ({r['speed_mps'] * 3.6:.1f} km/h)  |  "
+                f"Độ trễ L2: {r['e2e_latency_ms']:.1f} ms  |  "
+                f"P99/Max: {summary['a11_budget']['total_e2e_worst_case_ms']:.1f}/{summary['latency_stats']['max_ms']:.0f} ms"
             )
 
             fig.canvas.draw()

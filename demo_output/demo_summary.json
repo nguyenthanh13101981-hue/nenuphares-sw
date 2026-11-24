@@ -1,4 +1,5 @@
 {
+  "demo_disclaimer": "Kịch bản minh họa dựng sẵn (scripted scenario) — không phải dữ liệu đo vòng kín trên bè thật.",
   "duration_s": 55.0,
   "fps": 25,
   "telemetry_rows": 1376,
@@ -10,21 +11,24 @@
   "final_sitl_curr_lim_a": 40.0,
   "latency_stats": {
     "count": 386.0,
-    "mean_ms": 12.461767686528498,
-    "p50_ms": 4.922834,
-    "p95_ms": 11.572695999999999,
-    "p99_ms": 26.613458799999997,
-    "max_ms": 2823.15258
+    "mean_ms": 3.8890100518134716,
+    "p50_ms": 3.8896315,
+    "p95_ms": 6.88943425,
+    "p99_ms": 14.13278909999999,
+    "max_ms": 26.518243
   },
   "a11_budget": {
-    "l2_pipeline_p99_ms": 26.613458799999997,
+    "l2_pipeline_p99_ms": 14.13278909999999,
+    "l2_pipeline_max_ms": 26.518243,
     "l2_budget_ms": 65.0,
     "l2_within_budget": true,
     "camera_hw_worst_case_ms": 93.0,
     "l1_and_dshot_ms": 21.0,
-    "total_e2e_worst_case_ms": 140.6134588,
+    "total_e2e_worst_case_ms": 128.1327891,
+    "total_e2e_max_ms": 140.51824299999998,
     "tr41_budget_ms": 200.0,
-    "tr41_pass": true
+    "tr41_pass": true,
+    "max_within_tr41": true
   },
   "events": [
     {
@@ -34,13 +38,18 @@
     },
     {
       "t_s": 13.0,
-      "code": "S2",
-      "label": "Phát hiện vật cản -> Lách an toàn"
+      "code": "S11",
+      "label": "Phát hiện vật cản -> Lách S11"
     },
     {
       "t_s": 21.0,
+      "code": "S2",
+      "label": "Tiếp cận cầu (>= 10 m, <= 2 km/h)"
+    },
+    {
+      "t_s": 22.52,
       "code": "S3",
-      "label": "Tiếp cận cầu (<= 2 km/h)"
+      "label": "Canh giữa hai thành cầu (±25 cm)"
     },
     {
       "t_s": 24.0,
@@ -84,30 +93,30 @@
     }
   ],
   "a13_test_summary": {
-    "L0 Bo C8\n(GTest)": {
+    "L0 Bo C8\n(Mock HAL)": {
+      "passed": 10,
+      "total": 10,
+      "note": "TR-8.3, 30/30 mock"
+    },
+    "L2 Logic lõi\n(Host/Prop)": {
       "passed": 6,
       "total": 6,
-      "note": "30/30 E-stop"
+      "note": "A.8, ENU->NED, TR-4.16"
     },
     "L1 Lua\n(SITL)": {
       "passed": 4,
       "total": 4,
-      "note": "M1-M4, 70/40A, WD, EKF"
+      "note": "M1-M4, EMA, WD, Fence"
     },
     "L2 ROS 2\n(colcon)": {
-      "passed": 17,
-      "total": 17,
+      "passed": 24,
+      "total": 24,
       "note": "11 node, QoS, bag"
     },
-    "SITL Phủ\nbảng A.8": {
-      "passed": 41,
-      "total": 41,
+    "SITL Phủ\nCdCT A.8": {
+      "passed": 52,
+      "total": 52,
       "note": "0 lỗi ngoài bảng"
-    },
-    "Tiêm lỗi\nGĐ 6": {
-      "passed": 4,
-      "total": 4,
-      "note": "USB3, BLE, WD, LoRa"
     }
   }
 }

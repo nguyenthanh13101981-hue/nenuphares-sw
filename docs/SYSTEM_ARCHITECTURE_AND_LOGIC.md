@@ -378,7 +378,7 @@ Khắc phục triệt để lỗi đảo trục và lỗi quaternion `w == 0` tr
 ### 4.5 Tránh vật cản & Ngân sách độ trễ TR-4.1 (`<= 200 ms`)
 
 - Giữ nguyên phân tách **Config A (400P)** cho tránh vật cản (`<= 200 ms`) và **Config B (800P)** chỉ dùng cho đo tĩnh không `S4` ở `<= 2 km/h`.
-- `latency_probe.py` xuất đầy đủ cả **`p99_ms`** và **`max_ms`** (`max_within_tr41`) để không che giấu các điểm trễ đột biến (ví dụ mẫu demo stub trước đây có `P99 = 26,61 ms` nhưng `max_ms = 2.823 ms`).
+- `latency_probe.py` xuất đầy đủ cả **`p99_ms`** và **`max_ms`** (`max_within_tr41`) để không che giấu các điểm trễ đột biến (trong bản chạy demo stub mới nhất: `L2 P99 = 14,13 ms`, `L2 Max = 26,52 ms`; bản demo đầu tiên trước đó từng xuất hiện outlier `max_ms = 2.823 ms` khi `P99 = 26,61 ms`).
 
 ---
 
