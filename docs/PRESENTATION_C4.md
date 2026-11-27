@@ -1,12 +1,12 @@
-# Dàn ý Trình chiếu Khối C4 — Điều khiển & Máy tính Nhúng (`nenuphares-sw`)
+# Tài liệu Trình bày Khối C4 — Điều khiển & Máy tính Nhúng (`nenuphares-sw`)
 
-Tài liệu tóm tắt theo dạng **8 slide sẵn sàng trình chiếu** (thời lượng 10–15 phút) cho buổi báo cáo tiến độ **Khối C4** (gồm **C4.1 Pixhawk 6C / Tầng L1** và **C4.2 Raspberry Pi 5 / Tầng L2**) của dự án **NÉNUPHARES BONNEVAL V1 — CdCT Final 2.0**.
+Tài liệu tóm tắt theo **8 mục trọng tâm** (thời lượng 10–15 phút) cho buổi báo cáo tiến độ **Khối C4** (gồm **C4.1 Pixhawk 6C / Tầng L1** và **C4.2 Raspberry Pi 5 / Tầng L2**) của dự án **NÉNUPHARES BONNEVAL V1 — CdCT Final 2.0**.
 
 > **Tài liệu kỹ thuật chi tiết đi kèm:** [SYSTEM_ARCHITECTURE_AND_LOGIC.md](SYSTEM_ARCHITECTURE_AND_LOGIC.md) · [INTERFACE_FREEZE_A14.md](INTERFACE_FREEZE_A14.md) · [tr_fr_traceability_matrix.md](tr_fr_traceability_matrix.md) · [hil_poweron_checklist.md](hil_poweron_checklist.md)
 
 ---
 
-## Slide 1 — Vai trò Khối C4 trong Kiến trúc Bảo vệ 3 tầng
+## Mục 1 — Vai trò Khối C4 trong Kiến trúc Bảo vệ 3 tầng
 
 ```mermaid
 flowchart LR
@@ -31,11 +31,9 @@ flowchart LR
   - **C4.2 (L2)** ra quyết định nhiệm vụ & nhận thức; nếu C4.2 treo, **C4.1 (L1)** tự ép `HOLD` sau `3 s`.
   - **C8 (L0)** độc lập hoàn toàn ở mức phần cứng bare-metal; **C4 tuyệt đối không có quyền đóng contactor động lực**.
 
-> *Lời dẫn gợi ý (~1,5 phút):* "Khối C4 của nhóm gồm hai bộ xử lý tách bạch trách nhiệm: Raspberry Pi 5 chạy ROS 2 Jazzy cho nhận thức và máy trạng thái nhiệm vụ, và Pixhawk 6C chạy ArduPilot + Lua ở 50 Hz cho điều khiển vòng trong và failsafe. Tầng dưới cùng là bo C8 độc lập hoàn toàn — ngay cả khi cả hai máy tính của C4 gặp sự cố, C8 vẫn cắt cứng động lực theo chuẩn EN ISO 13850."
-
 ---
 
-## Slide 2 — Giao diện Vật lý & Truyền thông của Khối C4
+## Mục 2 — Giao diện Vật lý & Truyền thông của Khối C4
 
 | Kết nối | Bus / Giao thức | Tốc độ / Tần số | Chiều dữ liệu | Cơ chế an toàn / Bảo mật |
 | :--- | :--- | :---: | :---: | :--- |
@@ -46,11 +44,9 @@ flowchart LR
 | **C4 ↔ Bo an toàn C8** | GPIO / UART nội bộ | Keepalive `1 Hz`, `BRIDGE_ZONE <= 60 s` | Hai chiều | Mất keepalive `3 s` → `HOLD_REQ`; C4 không có lệnh đóng contactor |
 | **C4.2 ↔ QGroundControl** | MAVLink 2 qua VPN | Liên tục | Hai chiều | Lệnh vận hành `START/HOLD/RTB/RESET/ESTOP` → `/operator/cmd` |
 
-> *Lời dẫn gợi ý (~1 phút):* "Toàn bộ giao diện điện và truyền thông của C4 đã được đóng băng tại [INTERFACE_FREEZE_A14.md](INTERFACE_FREEZE_A14.md) để phối hợp song song với các nhóm C2/C3, C5, C6 và C8."
-
 ---
 
-## Slide 3 — 7 Nguyên tắc Thiết kế cứng (CdCT Final 2.0)
+## Mục 3 — 7 Nguyên tắc Thiết kế cứng (CdCT Final 2.0)
 
 1. **Không LiDAR, không nghiêng camera:** chỉ dùng stereo OAK-D Pro W lắp ngang (`alpha_tilt = 0°`), cao `20 cm` trên boong.
 2. **Không dùng la bàn từ:** định hướng bằng **GNSS 2 ăng-ten** (`COMPASS_USE*=0`, `EK3_SRC1_YAW=2`) để tránh nhiễu từ trường từ dòng `70 A` và kết cấu cầu.
@@ -60,11 +56,9 @@ flowchart LR
 6. **Không hardcode kích thước thân bè (TBD-06):** nạp động `v1_70x50.yaml` hoặc `v1_98x68.yaml` (gồm cả `total_height_above_water_m` cho phép đo cầu `S4`).
 7. **Bảo mật & Chống tái khởi động bất ngờ:** ký MAVLink 2 (32B), LoRa 12B HMAC-SHA256 kèm `sender_id` và lưu counter qua reboot.
 
-> *Lời dẫn gợi ý (~1,5 phút):* "Bảy luật cứng này khóa chặt các lựa chọn kỹ thuật để mã nguồn không bị lẫn yêu cầu cũ, đồng thời giúp đổi thân bè từ 70×50 sang 98×68 cm mà không phải sửa một dòng code logic nào."
-
 ---
 
-## Slide 4 — Kiến trúc bên trong C4.2 (Raspberry Pi 5 — 11 Node ROS 2 Jazzy)
+## Mục 4 — Kiến trúc bên trong C4.2 (Raspberry Pi 5 — 11 Node ROS 2 Jazzy)
 
 - **Phân tách QoS triệt để ([qos.py](../l2_ros2_ws/src/nenuphar_nodes/nenuphar_nodes/qos.py)):**
   - `SENSOR_QOS` (`BEST_EFFORT, depth=1`): cho ảnh depth/stereo, IMU, VIO, vật cản → luôn lấy khung hình mới nhất, không tích tụ độ trễ.
@@ -74,11 +68,9 @@ flowchart LR
   - 10 node kế thừa `MonitoredNode` phát `/system/node_heartbeat` (`1 Hz`) → `system_monitor` tính bitmask 10-bit (timeout `3 s`) + đọc tốc độ USB 3 thật từ `/sys/bus/usb/devices` → phát `/system/health` → `mavlink_bridge` gửi MAVLink `HEARTBEAT (compid=191)` xuống C4.1 và `KEEPALIVE` sang C8.
 - **Tách sạch lõi logic thuần Python để kiểm thử độc lập:** `fsm_engine`, `mavlink_transforms`, `corridor_logic`, `energy_logic`, `clearance_logic`, `usb_probe`.
 
-> *Lời dẫn gợi ý (~2 phút):* "Điểm mạnh trong kiến trúc C4.2 là tách lõi thuật toán khỏi lớp giao tiếp ROS 2 — tương tự cách tách `core/` và `hal/` ở L0 — giúp chạy unit test và property test tốc độ cao trên mọi máy mà không cần phần cứng thật."
-
 ---
 
-## Slide 5 — Máy trạng thái Nhiệm vụ `S0–S12` (CdCT A.8) & 3 Tầng Lỗi
+## Mục 5 — Máy trạng thái Nhiệm vụ `S0–S12` (CdCT A.8) & 3 Tầng Lỗi
 
 - **Thứ tự ưu tiên cứng (phân giải tập trung trong `resolve_fsm_state()`):**
   $$\text{S9} > \text{S8} > \text{S12} > \text{S7} > \text{S11} > \text{S10} > \text{S1}$$
@@ -90,11 +82,9 @@ flowchart LR
   - **`S11` Lách vật cản** (`g >= 1,35 m`, trong Z2 `±1,25 m`, `<= 10 s`) ưu tiên **cao hơn `S10` (RTB)** để bè đang về bến vẫn lách được vật cản.
   - **`S12` ĐDKC** (lỗi bậc 2: lệch Z1 `> 5 s` sau `1` lần thử lại, hoặc **`SoC <= 10%` khi còn lực đẩy**).
 
-> *Lời dẫn gợi ý (~2 phút):* "Mọi trạng thái và ưu tiên đều có ý nghĩa vật lý rõ ràng: đang về bến gặp vật cản vẫn phải lách (`S11 > S10`); gặp lỗi dưới cầu hay pin còn 10% mà còn động cơ thì phải thoát cầu (`S8`) hoặc tấp vào ĐDKC (`S12`) thay vì thả trôi giữa kênh."
-
 ---
 
-## Slide 6 — Hai Luồng Nghiệp vụ Trọng tâm: Qua cầu & Tránh vật cản
+## Mục 6 — Hai Luồng Nghiệp vụ Trọng tâm: Qua cầu & Tránh vật cản
 
 - **Chuỗi qua gầm cầu phối hợp 3 tầng (`S2 → S3 → S4 → S5 → S6`):**
   - Tại `S4`: đo tĩnh không bằng **Config B (800P)** ở `<= 2 km/h`; chỉ cấp phép khi `clearance >= total_height_above_water + 0,10 m`, sai lệch CSDL cầu `<= 0,05 m`, độ chụm `<= 0,05 m`. Kết quả đo cũ bị xóa ngay khi rời `S4`.
@@ -106,11 +96,9 @@ flowchart LR
   - **Config A (400P):** `67` (chờ khung 15 Hz) + `5` (phơi sáng) + `21` (OAK-D) + `<= 65` (Pi 5) + `20` (L1 50 Hz) + `1` (DShot) = **`179 ms <= 200 ms`**.
   - **Config B (800P):** `~255 ms` → cấm dùng tránh vật cản, chỉ dùng tĩnh ở `S4 <= 2 km/h`.
 
-> *Lời dẫn gợi ý (~2 phút):* "Đây là hai bài toán khó nhất của C4. Việc tách rõ Config A cho tránh vật cản dưới 200 ms và Config B cho đo cầu chậm dưới 2 km/h, kết hợp chuyển đổi trục ENU→NED và xóa kết quả đo cũ, giải quyết triệt để rủi ro va chạm gầm cầu."
-
 ---
 
-## Slide 7 — Kiến trúc bên trong C4.1 (Pixhawk 6C — ArduPilot Rover + Lua)
+## Mục 7 — Kiến trúc bên trong C4.1 (Pixhawk 6C — ArduPilot Rover + Lua)
 
 - **Tham số chuẩn A.7 ([sitl_boat_a7.parm](../l1_ardupilot/params/sitl_boat_a7.parm)):**
   - `FRAME_CLASS=2` (Boat), `SCHED_LOOP_RATE=50 Hz`, `COMPASS_USE*=0`, `EK3_SRC1_YAW=2`, `VISO_TYPE=1` (`EK3_SRC2_*=6`).
@@ -123,11 +111,9 @@ flowchart LR
   - Mất `HEARTBEAT (compid=191)` quá `3 s` → ép `HOLD`; giấy phép `BRIDGE_PERMIT` hết hạn sau **TTL `15 s`** nếu L2 chết.
   - **Giữ quyền ưu tiên con người:** không bao giờ ép `HOLD` nếu người vận hành chuyển sang `MANUAL (0)` hoặc `STEERING (3)`.
 
-> *Lời dẫn gợi ý (~2 phút):* "Tầng C4.1 không chỉ nhận lệnh từ Pi 5 mà đóng vai trò lưới bảo vệ độc lập: tự lọc chống dao động dòng, tự gỡ rong 3 chu kỳ, tự khóa cầu khi phép hết hạn, và luôn nhường quyền cho người lái nếu chuyển sang chế độ thủ công."
-
 ---
 
-## Slide 8 — Kết quả Kiểm chứng, Minh họa & Lộ trình HIL Trung thực
+## Mục 8 — Kết quả Kiểm chứng, Minh họa & Lộ trình HIL Trung thực
 
 | Hạng mục kiểm thử | Kết quả hiện tại | Phạm vi xác minh thực tế |
 | :--- | :---: | :--- |
@@ -150,8 +136,6 @@ flowchart LR
   2. Chạy `VINS-Fusion-ROS2` vòng kín với Pixhawk 6C & GNSS 2 ăng-ten ngoài trời.
   3. Ghép driver RP2350 (MPU-6050, 4× HX711, SX1262, Flash) vào khung [l0_c8_pico2/firmware](../l0_c8_pico2/firmware/main.cpp) và chạy nghiệm thu **30/30 lần E-stop vật lý**.
 
-> *Lời dẫn gợi ý (~2 phút):* "Đến thời điểm hiện tại, toàn bộ kiến trúc, giao diện, lõi logic và failsafe 3 tầng đã chạy kiểm thử tự động xanh 100% trên CI và SITL. Chúng em tách bạch rõ phần đã chứng minh bằng unit/SITL và phần chờ phần cứng thật để sẵn sàng bước vào giai đoạn HIL ngay khi linh kiện về."
-
 ---
 
 ## Phụ lục — Bộ 6 câu hỏi phản biện Q&A & Checklist mở tab khi báo cáo
@@ -166,7 +150,7 @@ flowchart LR
 | **6. Nếu người vận hành đè kẹt nút Reset trên Bo C8 hoặc cảm biến nghiêng bị `NaN`?** | C8 bắt **sườn lên** cho cả Reset và Start (kẹt nút không thể mở chốt `STOPPED` và không tự đóng rơ-le); cảm biến `NaN`/quá hạn `> 500 ms` là fail-safe (chặn arm ở `SAFE_OFF`, cắt `STOPPED` khi `ARMED`). |
 
 ### 4 tab nên mở sẵn trước khi trình bày
-1. [PRESENTATION_C4.md](PRESENTATION_C4.md) (hoặc slide xuất từ tệp này) + [SYSTEM_ARCHITECTURE_AND_LOGIC.md](SYSTEM_ARCHITECTURE_AND_LOGIC.md) khi cần phóng to sơ đồ 11 node / FSM 52 cạnh.
+1. [PRESENTATION_C4.md](PRESENTATION_C4.md) + [SYSTEM_ARCHITECTURE_AND_LOGIC.md](SYSTEM_ARCHITECTURE_AND_LOGIC.md) khi cần phóng to sơ đồ 11 node / FSM 52 cạnh.
 2. [tr_fr_traceability_matrix.md](tr_fr_traceability_matrix.md) (đối chiếu minh bạch từng yêu cầu TR/FR).
 3. Tab **GitHub Actions** của repo (cho thấy 3 job CI xanh thực tế).
 4. Video [demo_nenuphares_v1.mp4](../demo_output/demo_nenuphares_v1.mp4) (phát ở cuối để minh họa tổng hợp 5 kịch bản).
