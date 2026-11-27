@@ -1,15 +1,20 @@
 param_group,param_name,target_layer,initial_value,sitl_value,l0_value,l1_value,status,notes
 ekf,EK3_SRC1_YAW,L1,2,2,,,sitl_verified,A.7: Huong mui tu GNSS 2 ang-ten (khong dung compass)
 ekf,EK3_SRC2_POSXY_VELXY_YAW,L1,6,6,,,sitl_verified,TBD-20: Nguon EKF 2 dung VIO ODOMETRY (VISO_TYPE=1) chuyen bang MAV_CMD_SET_EKF_SOURCE_SET(2)
-ekf,ekf_source_switch_threshold,L1/L2,SIM_GPS1_ENABLE=0,verified_on_gnss_loss,,,sitl_verified,TBD-20: Chuyen nguon EKF GNSS <-> VIO ODOMETRY duoi cau; tinh chinh nguong HDOP/num_sats tai L1
-corridor,lateral_deviation_alert_m,L2,0.15,0.15,,,sitl_verified,D-16: Nguong canh bao lech hanh lang Z1/Z2 (> 15 cm)
-fsm,s3_s6_timeout_s,L2,30.0 / 20.0,30.0 / 20.0,,,sitl_verified,TBD-20: Timeout S3=30 s / S6=20 s chuyen ve S12 (DDKC) da kiem chung SITL Giai doan 5
-l1_failsafe,FS_TIMEOUT,L1,3.0,3.0,,,sitl_verified,A.7: Rover 4.7.3 dung FS_TIMEOUT >= 3 s (khong co tham so GUID_TIMEOUT cua Copter)
-l1_failsafe,FS_GCS_TIMEOUT_normal_bridge,L1,5 / 30,5 / 30,,,sitl_verified,A.7 Lua: 5 s binh thuong; noi long 30 s trong BRIDGE_ZONE khi co BRIDGE_PERMIT=1
-l1_failsafe,l2_watchdog_timeout_s,L1,3.0,3.0,,,sitl_verified,A.7 Lua: Mat heartbeat Pi 5 (compid=191) > 3.0 s tu chuyen HOLD (mode 4)
-lua_current_limit,total_current_limit_normal_a,L1,70.0,70.0,,,sitl_verified,A.7 Lua: Gioi han dong tong M1 binh thuong (70 A; nen cong suat khi vuot)
+ekf,ekf_source_switch_threshold,L1/L2,SIM_GPS1_ENABLE=0,verified_on_gnss_loss,,,sitl_verified,TBD-20: Chuyen nguon EKF GNSS <-> VIO ODOMETRY (ENU->NED) duoi cau; tinh chinh nguong HDOP/num_sats tai L1
+corridor,z1_z2_corridor_tr416,L2,Z1=0.30m/5s+1retry->S12; Z2=1.25m->S7; g>=1.35m,unit_verified,,,unit_verified,TR-4.16/D-16: Chieu polyline; Z1 (+/-0.30m) 5s + 1 lan thu lai -> S12; Z2 (+/-1.25m -> S7); bo qua luc lach S11
+fsm,s3_s6_s11_timeout_s,L2,S3=30.0s->S7 / S6=30.0s->S12_or_S7 / S11=10.0s,30.0 / 30.0 / 10.0,,,sitl_scripted_verified,TBD-20/A.8: Doc tu docs/cdct_spec_a8_a10.yaml (52/52 canh hop le; 0 canh ngoai bang)
+l1_failsafe,FS_TIMEOUT_and_FS_ACTION,L1,3.0 / 2 (Hold),3.0 / 2,,,sitl_verified,A.7: Rover 4.7.3 dung FS_TIMEOUT >= 3 s + FS_ACTION=2 (Hold) + FENCE_ACTION=2 (Hold)
+l1_failsafe,FS_GCS_ENABLE_and_TIMEOUT,L1,1 / 5s_normal_30s_bridge,1 / 5_30,,,sitl_verified,A.7 Lua: FS_GCS_ENABLE=1; 5 s binh thuong; noi long 30 s trong BRIDGE_ZONE khi co BRIDGE_PERMIT con han
+l1_failsafe,l2_watchdog_timeout_s,L1,3.0,3.0,,,sitl_verified,A.7 Lua: Mat heartbeat Pi 5 (compid=191) > 3.0 s tu chuyen HOLD (mode 4); khong de MANUAL/STEERING
+l1_failsafe,bridge_permit_ttl_s,L1,15.0,15.0,,,sitl_verified,A.7 Lua: Han dung giay phep qua cau 15 s (SCR_USER4); het han neu L2 chet; giu quyen MANUAL/STEERING
+lua_current_limit,total_current_limit_normal_a,L1,70.0,70.0,,,sitl_verified,A.7 Lua: Gioi han dong tong M1 binh thuong (70 A; nen cong suat co loc EMA)
 lua_current_limit,total_current_limit_backup_a,L1,40.0,40.0,,,sitl_verified,A.7 Lua: Gioi han dong tong M2/M3/M4 du phong (40 A; tran 30 A/ESC)
+lua_current_limit,ema_alpha_and_slew,L1,0.25 / -0.12 +0.03,0.25 / -0.12 +0.03,,,sitl_verified,A.7/TR-5.6 Lua: Loc thong thap EMA + slew-rate chong dao dong 25-50 Hz; go rong <= 3 xung dao chieu
 sitl_env,SIM_TIDE_SPEED_and_SIM_WIND_SPD,L1,0.10,0.10,,,sitl_verified,Giai doan 4: Nhieu dong chay & gio 0.10 m/s tren SITL Boat
-battery,BATT_CRT_VOLT,L1,11.5,11.5,,,sitl_verified,A.7/A.9: Nguong cat pin mem tang L1 (11.5-12.0 V, cao hon BMS cung 10.0 V)
+battery,BATT_MONITOR_LOW_CRT,L1,4 / 12.2V(RTL) / 11.5V(Hold),4 / 12.2 / 11.5,,,sitl_verified,A.7/A.9: Do shunt (BATT_MONITOR=4); BATT_FS_LOW_ACT=1 (RTL); BATT_FS_CRT_ACT=2 (Hold); BMS cung 10.0 V
+battery,warn_hysteresis_soc_pct,L2,28.0_enter / 30.0_clear,unit_verified,,,unit_verified,A.9.3: Hysteresis WARN 28%/30%; RTB <= 21% (S10); SoC <= 10% con luc day -> S12 DDKC
 battery,voltage_compensation_gain,L1/L2,TBD,,,,pending_l1,TBD-20: Tham so bu ap he thong dong luc (do tren phan cung L1)
-raft_geometry,active_raft_profile,L1/L2,v1_70x50,v1_70x50,,,pending_gst,TBD-06/RI-1.5: Chon v1_70x50 hoac v1_98x68 sau thu nghiem G-ST
+c8_safety,tr83_tilt_load_windows,L0,>15deg_200ms / >3deg_1000ms / >=10kg_200ms,mock_hal_verified,,,mock_hal_verified,TR-8.3/A.10: Cua so nghieng dong/tinh & tai tru bi; NaN/stale fail-safe; C4 khong dong relay; cho HIL
+c8_lora,lora_12b_sender_and_boot_jump,L0,4b_sender_id / +1000_jump,mock_hal_verified,,,mock_hal_verified,D-27/TBD-20: Byte 0=(sender_id<<4)|cmd; luu counter Flash qua reboot; chot cung nhom C8
+raft_geometry,active_raft_profile,L1/L2,v1_70x50,v1_70x50,,,pending_gst,TBD-06/RI-1.5: Chon v1_70x50 hoac v1_98x68 (co total_height_above_water_m) sau thu nghiem G-ST

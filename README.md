@@ -215,6 +215,7 @@ python3 tools/analyze_blackbox_bag.py demo_output/demo_blackbox_bag
 
 ## 7. Bản đồ tài liệu dự án
 
+- [PRESENTATION_C4.md](docs/PRESENTATION_C4.md) — Dàn ý trình chiếu 8 slide, lời dẫn & Q&A phản biện cho Khối C4.
 - [SYSTEM_ARCHITECTURE_AND_LOGIC.md](docs/SYSTEM_ARCHITECTURE_AND_LOGIC.md) — Kiến trúc chi tiết, sơ đồ khối và giải thích toàn bộ logic L2/L1/L0.
 - [cdct_spec_a8_a10.yaml](docs/cdct_spec_a8_a10.yaml) — Nguồn chân lý máy đọc cho FSM `S0–S12` và các bảng ngưỡng.
 - [PROJECT_RULES.md](PROJECT_RULES.md) — Tập luật cứng phát triển phần mềm CdCT Final 2.0.

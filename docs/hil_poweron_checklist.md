@@ -10,7 +10,8 @@
 - [ ] Cấp nguồn logic/USB cho Pixhawk 6C (chưa cấp nguồn động lực ESC).
 - [ ] Nạp ArduPilot Rover (`APMrover2-stable` / `Rover-4.7.3`, SHA `d9c5097c3d8333435712ffed86bca8ce00c4bb46`) và bộ tham số `l1_ardupilot/params/sitl_boat_a7.parm` (điều chỉnh cổng UART thực tế `>= 921.600 baud`).
 - [ ] Chép 2 script Lua `l1_ardupilot/lua/nenuphar_thruster_power.lua` và `nenuphar_watchdog_bridge.lua` vào thẻ nhớ `APM/scripts/`.
-- [ ] Xác nhận trên QGroundControl: `FRAME_CLASS=2`, `SCHED_LOOP_RATE=50`, `COMPASS_USE=0` (định hướng GNSS 2 ăng-ten), `BATT_CRT_VOLT=11.5–12.0 V`, thấy thông báo `STATUSTEXT` 2 script Lua đã nạp thành công.
+- [ ] Xác nhận trên QGroundControl: `FRAME_CLASS=2`, `SCHED_LOOP_RATE=50`, `COMPASS_USE=0` (GNSS 2 ăng-ten), `FS_TIMEOUT=3.0`, `FS_ACTION=2` (Hold), `FS_GCS_ENABLE=1`, `BATT_MONITOR=4`, `BATT_LOW_VOLT=12.2` (`BATT_FS_LOW_ACT=1` RTL), `BATT_CRT_VOLT=11.5` (`BATT_FS_CRT_ACT=2` Hold), `FENCE_ENABLE=1` (`FENCE_ACTION=2` Hold), và thấy `STATUSTEXT` 2 script Lua đã nạp thành công.
+- [ ] Thử chuyển tay sang chế độ `MANUAL (0)` / `STEERING (3)` khi đang kích hoạt khóa cầu `BRG_LOCK` hoặc watchdog L2: xác nhận Lua **không bao giờ ép đè** lên quyền điều khiển tay của người vận hành.
 
 ### Bước 2 — Raspberry Pi 5 (Tầng L2)
 - [ ] Cấp nguồn 5 V ổn định cho Raspberry Pi 5 (8 GB, NVMe 256 GB, Ubuntu 24.04 LTS + ROS 2 Jazzy).
@@ -42,10 +43,13 @@
 - [ ] Xác nhận phân tầng ngưỡng pin: phần mềm L1 `BATT_CRT` tại `11,5–12,0 V` (hoặc `SoC <= 10%`), cao hơn ngưỡng cắt cứng BMS (`10,0 V`).
 
 ### Bước 6 — Bo an toàn C8 (Raspberry Pi Pico 2) & LoRa 12 byte
-- [ ] Nạp firmware `l0_c8_pico2` vào Pico 2; xác nhận khởi động ở trạng thái `SAFE_OFF` (rơ-le động lực mở) và watchdog phần cứng ngoài `100 ms` hoạt động.
-- [ ] Kiểm tra keepalive C4 -> C8 (1 Hz): rút dây/dừng keepalive `3 s` -> xác nhận C8 chuyển `HOLD_REQ` (giữ rơ-le đóng, phát tín hiệu giữ vị trí).
-- [ ] Kiểm tra cờ `BRIDGE_ZONE` (<= 60 s): tạm ức chế cắt tự động do nghiêng/tải `>= 10 kg`, nhưng **không chặn** nút E-stop tay hay gói LoRa `STOP`.
-- [ ] Kiểm tra chống phát lại (anti-replay) và sai HMAC trên gói LoRa 12 byte (dải `920–923 MHz` tại Việt Nam).
+- [ ] Nạp firmware `l0_c8_pico2` vào Pico 2; xác nhận khởi động ở trạng thái `SAFE_OFF` (rơ-le động lực mở) và watchdog phần cứng ngoài `100 ms` hoạt động (chỉ đá khi chu kỳ đọc cảm biến khỏe mạnh).
+- [ ] Kiểm tra quy tắc **C4 không tự đóng contactor (A.10):** cấp keepalive `1 Hz` từ C4 không làm đóng rơ-le; chỉ chuyển `SAFE_OFF -> ARMED` khi có đủ **sườn lên nút Start vật lý tại bè + gói LoRa `RUN` còn hạn (`<= 30 s`) + E-stop đã nhả**.
+- [ ] Kiểm tra **bắt sườn nút Reset (EN ISO 13850):** nhấn giữ kẹt nút Reset rồi nhả E-stop -> xác nhận C8 vẫn giữ chốt cứng `STOPPED` và không tự đóng lại rơ-le.
+- [ ] Kiểm tra keepalive C4 -> C8 (`1 Hz`): rút dây/dừng keepalive `3 s` -> xác nhận C8 chuyển `HOLD_REQ` (giữ rơ-le đóng, phát tín hiệu giữ vị trí).
+- [ ] Kiểm tra 3 ngưỡng **TR-8.3 & lỗi cảm biến fail-safe:** nghiêng động `> 15°` (`>= 200 ms`), nghiêng tĩnh `> 3°` (`> 1 s`), thay đổi tải `>= 10 kg` sau trừ bì; rút dây MPU-6050/HX711 (`valid=false`/`NaN`/quá hạn `> 500 ms`) -> xác nhận chặn arming ở `SAFE_OFF` và ngắt `STOPPED` khi đang `ARMED`.
+- [ ] Kiểm tra cờ `BRIDGE_ZONE` (`<= 60 s`): tạm ức chế cắt tự động do nghiêng/tải TR-8.3, nhưng **tuyệt đối không chặn** nút E-stop tay, LoRa `STOP`, `4G STOP` hay `Watchdog STOP`.
+- [ ] Kiểm tra chống phát lại bền vững qua reboot trên gói LoRa 12 byte (`920–923 MHz`): tắt/bật nguồn C8 rồi phát lại gói cũ -> bị từ chối; reboot máy phát với bước nhảy `+1000` -> chấp nhận `STOP` ngay lập tức.
 
 ---
 
@@ -69,7 +73,7 @@ vcgencmd measure_temp && vcgencmd get_throttled
 
 | Hạng mục nghiệm thu | Tiêu chí đạt | Kết quả đo thực tế | Đạt / Chưa đạt |
 | :--- | :--- | :--- | :---: |
-| Độ trễ P99 tránh vật cản (Config A 400P — TBD-30) | `<= 200 ms` (`perception_geom <= 50 ms`) | `____ ms` | `[ ]` |
+| Độ trễ P99 & Max tránh vật cản (Config A 400P — TBD-30) | `P99 <= 200 ms` (`perception_geom <= 50 ms`); ghi nhận cả `Max` | `P99=___ / Max=___ ms` | `[ ]` |
 | Nhiệt độ & giảm xung Pi 5 (TBD-24, môi trường 55 °C) | Không vượt 80 °C; bật cờ tắt B2 nếu `perception_geom > 50 ms` | `____ °C` | `[ ]` |
 | Thử nghiệm E-stop (nút nhấn tay + LoRa `STOP` 920–923 MHz) | Tối thiểu **30/30 lần cắt 100%**, chốt cứng `STOPPED`, chỉ reset tay tại bè | `___ / 30` | `[ ]` |
 | Tiêm lỗi mất USB 3 / mất BLE BMS / mất heartbeat L2 / sai LoRa | Đạt 4/4 kịch bản đúng luật Final 2.0 | `___ / 4` | `[ ]` |
