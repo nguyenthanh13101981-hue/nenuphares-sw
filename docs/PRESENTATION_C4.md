@@ -75,15 +75,22 @@ flowchart LR
 
 ## Mục 5 — Máy trạng thái Nhiệm vụ `S0–S12` (CdCT A.8) & 3 Tầng Lỗi
 
-- **Thứ tự ưu tiên cứng (phân giải tập trung trong `resolve_fsm_state()`):**
+- **Thứ tự ưu tiên cứng (phân giải tập trung trong `resolve_fsm_state()`, nạp từ [cdct_spec_a8_a10.yaml](cdct_spec_a8_a10.yaml) — 52 cạnh hợp lệ):**
   $$\text{S9} > \text{S8} > \text{S12} > \text{S7} > \text{S11} > \text{S10} > \text{S1}$$
-- **Ý nghĩa đúng chuẩn CdCT Final A.8 (52 cạnh hợp lệ trong [cdct_spec_a8_a10.yaml](cdct_spec_a8_a10.yaml)):**
-  - `S0` Kiểm tra USB 3 & node sống → `S1` Tuần tra Z1 → `S2` Tiếp cận cầu (`>= 10 m`, `<= 2 km/h`) → `S3` Canh giữa hai thành cầu (`±25 cm`, timeout `30 s -> S7`) → `S4` Đo tĩnh không (chưa đạt `-> S7` đo lại) → `S5` Qua cầu (EKF=VIO) → `S6` Thoát cầu & khóa lại RTK (`> 30 s -> S12/S7`).
-  - `S7` Chờ/Hold (cũng là trạng thái kết thúc khi `S10` cập bến).
-  - **`S8` Rời gầm cầu khẩn cấp** (khi gặp sự cố trong `S5` nhưng **còn lực đẩy** — không dừng chết dưới cầu!).
-  - **`S9` Dừng khẩn cấp** (mất toàn bộ lực đẩy / E-stop / lỗi bậc 3 ngoài cầu + `HOLD-ALL <= 2 s`).
-  - **`S11` Lách vật cản** (`g >= 1,35 m`, trong Z2 `±1,25 m`, `<= 10 s`) ưu tiên **cao hơn `S10` (RTB)** để bè đang về bến vẫn lách được vật cản.
-  - **`S12` ĐDKC** (lỗi bậc 2: lệch Z1 `> 5 s` sau `1` lần thử lại, hoặc **`SoC <= 10%` khi còn lực đẩy**).
+
+| Trạng thái | Tên định danh | Chức năng & Quy tắc chuẩn CdCT Final A.8 |
+| :---: | :--- | :--- |
+| **`S0`** | `INIT_PRECHECK` | Khởi tạo & kiểm tra trước chạy: bắt buộc USB 3 `>= 5000 Mbps` và đủ 10 node sống mới cho `START → S1`. |
+| **`S1`** | `MISSION_PATROL` | Tuần tra bình thường trong hành lang `Z1 (±0,30 m)`, tối đa `1,5 m/s`, EKF nguồn `1` (GNSS 2 ăng-ten). |
+| **`S2 → S3`** | `BRIDGE_APPROACH` & `CENTERING` | Tiếp cận cầu (`>= 10 m`), giảm tốc `<= 2 km/h (0,556 m/s)`, canh giữa hai thành cầu (`±25 cm`, timeout `30 s → S7`). |
+| **`S4`** | `BRIDGE_CLEARANCE` | Đo tĩnh không Config B (`800P`), bật `BRIDGE_ZONE`. Chưa đạt `→ S7` chờ đo lại; rời `S4` xóa sạch kết quả đo cũ. |
+| **`S5 → S6`** | `BRIDGE_TRANSIT` & `EXIT` | `S5` qua cầu: bắt buộc `bridge_permit` (TTL `15 s`), EKF nguồn `2` (VIO). `S6` thoát cầu khóa lại RTK; quá `30 s → S12/S7`. |
+| **`S7`** | `HOLD_WAIT` | Chờ/giữ vị trí: lỗi bậc 1, `HOLD`, vượt `Z2`, quá hạn `S3`, chưa đạt `S4`, hoặc trạng thái kết thúc khi `S10` cập bến. |
+| **`S8`** | `BRIDGE_EMERG_EXIT` | **Rời gầm cầu khẩn cấp:** gặp sự cố bậc 3 trong `S5` nhưng **còn lực đẩy** — thoát khỏi gầm cầu trước, không dừng chết dưới cầu. |
+| **`S9`** | `EMERGENCY_STOP` | **Dừng khẩn cấp (ưu tiên cao nhất):** mất toàn bộ lực đẩy / E-stop / lỗi bậc 3 ngoài cầu + `HOLD-ALL <= 2 s`. |
+| **`S10`** | `RTB_RETURN_TO_BASE` | Về bến khi pin `<= 21%` hoặc lệnh RTB; cập bến an toàn `→ S7`. |
+| **`S11`** | `OBSTACLE_AVOID` | Lách vật cản (`g >= 1,35 m`, trong `Z2 ±1,25 m`, `<= 10 s`). **Ưu tiên `S11 > S10`** để bè đang về bến vẫn lách được vật cản. |
+| **`S12`** | `DDKC_EMERG_BERTH` | **Điểm dừng khẩn cấp hành lang (lỗi bậc 2):** lệch `Z1 > 5 s` sau `1` lần thử lại, hoặc **`SoC <= 10%` khi còn lực đẩy**. |
 
 ---
 
@@ -138,22 +145,3 @@ flowchart LR
   1. Tích hợp `depthai-ros` với OAK-D Pro W thật → đo `P99` & `Max` nhận thức thực tế trên Pi 5 (`<= 50 ms`).
   2. Chạy `VINS-Fusion-ROS2` vòng kín với Pixhawk 6C & GNSS 2 ăng-ten ngoài trời.
   3. Ghép driver RP2350 (MPU-6050, 4× HX711, SX1262, Flash) vào khung [l0_c8_pico2/firmware](../l0_c8_pico2/firmware/main.cpp) và chạy nghiệm thu **30/30 lần E-stop vật lý**.
-
----
-
-## Phụ lục — Bộ 6 câu hỏi phản biện Q&A & Checklist mở tab khi báo cáo
-
-| Câu hỏi giảng viên hay hỏi | Cách trả lời ngắn gọn, đúng trọng tâm |
-| :--- | :--- |
-| **1. Pi 5 (C4.2) treo giữa đường hoặc ngay trước cầu thì sao?** | Sau `3 s`, Lua watchdog trên Pixhawk tự ép `HOLD`; `BRIDGE_PERMIT` hết hạn sau TTL `15 s`; mất keepalive C4→C8 `3 s` kích `HOLD_REQ` (vẫn đóng rơ-le giữ vị trí, không thả trôi). Người lái vẫn luôn giành lại điều khiển bằng `MANUAL`/`STEERING`. |
-| **2. Tại sao pin `<= 10%` hay lỗi dưới cầu không ngắt nguồn ngay?** | Cắt đẩy dưới cầu hay giữa dòng nguy hiểm hơn là điều hướng an toàn: còn đẩy dưới cầu thì vào `S8` thoát cầu trước; pin `<= 10%` còn đẩy thì vào `S12` tấp ĐDKC; chỉ mất đẩy hoàn toàn hoặc E-stop mới vào `S9` / ngắt cứng C8. |
-| **3. Số liệu P99 và 30/30 E-stop đã là đo thật trên bè chưa?** | **Chưa.** `P99 = 14,13 ms / Max = 26,52 ms` đo khung truyền thông ROS 2 trên node stub; `30/30` E-stop là trên `MockC8Hal`. Công cụ đo thật (`latency_probe`, `analyze_blackbox_bag.py`) và `hil_poweron_checklist.md` đã dựng sẵn cho bàn HIL. |
-| **4. Nếu nhóm cơ khí đổi thân bè từ 70×50 sang 98×68 cm (TBD-06)?** | Không phải sửa logic C4; chỉ đổi `raft_profile` sang `v1_98x68.yaml` (đã có đủ kích thước, tọa độ cảm biến/thruster và `total_height_above_water_m` cho phép đo cầu `S4`). |
-| **5. Dữ liệu VIO từ ROS 2 sang Pixhawk có bị lệch hệ trục không?** | Đã tách module `mavlink_transforms.py` chuyển tường minh ROS `ENU/FLU → NED/FRD`, bảo toàn góc 180° (`w=0`), dùng stamp gốc, hiệp phương sai hữu hạn và có unit test pose kiểm chứng. |
-| **6. Nếu người vận hành đè kẹt nút Reset trên Bo C8 hoặc cảm biến nghiêng bị `NaN`?** | C8 bắt **sườn lên** cho cả Reset và Start (kẹt nút không thể mở chốt `STOPPED` và không tự đóng rơ-le); cảm biến `NaN`/quá hạn `> 500 ms` là fail-safe (chặn arm ở `SAFE_OFF`, cắt `STOPPED` khi `ARMED`). |
-
-### 4 tab nên mở sẵn trước khi trình bày
-1. [PRESENTATION_C4.md](PRESENTATION_C4.md) + [SYSTEM_ARCHITECTURE_AND_LOGIC.md](SYSTEM_ARCHITECTURE_AND_LOGIC.md) khi cần phóng to sơ đồ 11 node / FSM 52 cạnh.
-2. [tr_fr_traceability_matrix.md](tr_fr_traceability_matrix.md) (đối chiếu minh bạch từng yêu cầu TR/FR).
-3. Tab **GitHub Actions** của repo (cho thấy 3 job CI xanh thực tế).
-4. Video [demo_nenuphares_v1.mp4](../demo_output/demo_nenuphares_v1.mp4) (phát ở cuối để minh họa tổng hợp 5 kịch bản).
