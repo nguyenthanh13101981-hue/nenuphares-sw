@@ -1,7 +1,5 @@
 # Tài liệu Trình bày Khối C4 — Điều khiển & Máy tính Nhúng (`nenuphares-sw`)
 
-Tài liệu tóm tắt theo **8 mục trọng tâm** (thời lượng 10–15 phút) cho buổi báo cáo tiến độ **Khối C4** (gồm **C4.1 Pixhawk 6C / Tầng L1** và **C4.2 Raspberry Pi 5 / Tầng L2**) của dự án **NÉNUPHARES BONNEVAL V1 — CdCT Final 2.0**.
-
 > **Tài liệu kỹ thuật chi tiết đi kèm:** [SYSTEM_ARCHITECTURE_AND_LOGIC.md](SYSTEM_ARCHITECTURE_AND_LOGIC.md) · [INTERFACE_FREEZE_A14.md](INTERFACE_FREEZE_A14.md) · [tr_fr_traceability_matrix.md](tr_fr_traceability_matrix.md) · [hil_poweron_checklist.md](hil_poweron_checklist.md)
 
 ---
