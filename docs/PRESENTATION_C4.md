@@ -60,13 +60,16 @@ flowchart LR
 
 ## Mục 4 — Kiến trúc bên trong C4.2 (Raspberry Pi 5 — 11 Node ROS 2 Jazzy)
 
-- **Phân tách QoS triệt để ([qos.py](../l2_ros2_ws/src/nenuphar_nodes/nenuphar_nodes/qos.py)):**
-  - `SENSOR_QOS` (`BEST_EFFORT, depth=1`): cho ảnh depth/stereo, IMU, VIO, vật cản → luôn lấy khung hình mới nhất, không tích tụ độ trễ.
-  - `CMD_QOS` (`RELIABLE, depth=10`): cho trạng thái FSM, lệnh Guided, cảnh báo hành lang/năng lượng, heartbeat.
-- **Lập lịch thời gian thực trên Pi 5:** gán `SCHED_FIFO` trên nhân riêng cho 4 node trọng yếu (`camera_driver`, `vio`, `perception_geom`, `mavlink_bridge`); đặt `blackbox` ở ưu tiên thấp (`1 Hz` thường, `10 Hz` tại `S4`/lỗi `>= 2`).
-- **Chuỗi giám sát sống còn (Liveness Chain):**
-  - 10 node kế thừa `MonitoredNode` phát `/system/node_heartbeat` (`1 Hz`) → `system_monitor` tính bitmask 10-bit (timeout `3 s`) + đọc tốc độ USB 3 thật từ `/sys/bus/usb/devices` → phát `/system/health` → `mavlink_bridge` gửi MAVLink `HEARTBEAT (compid=191)` xuống C4.1 và `KEEPALIVE` sang C8.
-- **Tách sạch lõi logic thuần Python để kiểm thử độc lập:** `fsm_engine`, `mavlink_transforms`, `corridor_logic`, `energy_logic`, `clearance_logic`, `usb_probe`.
+| Nhóm chức năng | Các Node ROS 2 (11 node) | Vai trò cốt lõi, QoS & Lập lịch CPU |
+| :--- | :--- | :--- |
+| **Nhận thức & Định vị** *(Ưu tiên cao nhất)* | `1. camera_driver`<br>`2. vio` (`VINS-Fusion`)<br>`3. perception_geom`<br>`4. clearance` | Đọc stereo/depth `15 Hz` & IMU `200 Hz`, xuất VIO `20–30 Hz`, phát hiện vật cản Config A 400P (`<= 50 ms`) và đo tĩnh không `S4` Config B 800P. Dùng **`SENSOR_QOS` (`BEST_EFFORT, depth=1`)** cho luồng cảm biến và **`SCHED_FIFO`** cho 3 node chạy liên tục (`camera_driver`, `vio`, `perception_geom`). |
+| **Giám sát an toàn & Trạng thái** | `5. corridor_monitor`<br>`6. energy`<br>`7. formation` | Chiếu polyline hành lang `TR-4.16` (`Z1/Z2`); tính SoC từ shunt thật (`/l1/battery_shunt`) có hysteresis `28%/30%` + đối chiếu BLE; xuất tham chiếu đội hình `s_ref >= 2 Hz`. Dùng **`CMD_QOS` (`RELIABLE, depth=10`)**. |
+| **Ra quyết định & Cầu nối L1/L0** | `8. mission_fsm`<br>`9. mavlink_bridge` | `mission_fsm` tổng hợp toàn bộ monitor + `/operator/cmd` → quyết định `S0–S12` và phát `GuidedSetpoint` NED. `mavlink_bridge` (**`SCHED_FIFO`**) đổi hệ trục `ENU→NED`, TX/RX MAVLink 2 ký số hai chiều với L1 và gửi Keepalive/`BRIDGE_ZONE` sang C8. |
+| **Giám sát hệ thống & Hộp đen** | `10. system_monitor`<br>`11. blackbox` | `system_monitor` gom `/system/node_heartbeat (1 Hz)` của 10 node kế thừa `MonitoredNode` thành bitmask 10-bit (timeout `3 s`) + đọc tốc độ USB 3 thực từ `/sys/bus/usb/devices`. `blackbox` chạy ưu tiên thấp ghi `rosbag2` (`1 Hz` thường, `10 Hz` tại `S4`/lỗi `>= 2`). |
+
+- **Lý do phân tách QoS ([qos.py](../l2_ros2_ws/src/nenuphar_nodes/nenuphar_nodes/qos.py)):** `SENSOR_QOS` (`BEST_EFFORT, depth=1`) luôn lấy khung hình mới nhất để không tích tụ độ trễ; `CMD_QOS` (`RELIABLE, depth=10`) đảm bảo không rơi lệnh FSM, setpoint hay cảnh báo an toàn.
+- **Chuỗi giám sát sống còn (Liveness Chain):** 10 node `MonitoredNode` → `system_monitor` → `/system/health` → `mavlink_bridge` phát MAVLink `HEARTBEAT (compid=191)` xuống C4.1 và `KEEPALIVE` sang C8.
+- **Tách lõi logic thuần Python để kiểm thử độc lập:** `fsm_engine`, `mavlink_transforms`, `corridor_logic`, `energy_logic`, `clearance_logic`, `usb_probe` (chạy unit/property test tốc độ cao không phụ thuộc `rclpy`).
 
 ---
 
